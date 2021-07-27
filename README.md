@@ -1,7 +1,10 @@
+CLASS for the Mirror Twin Higgs model:
+======================================
+
+UNDER CONSTRUCTION
+
 CLASS: Cosmic Linear Anisotropy Solving System  {#mainpage}
 ==============================================
-
-Authors: Julien Lesgourgues and Thomas Tram
 
 with several major inputs from other people, especially Benjamin
 Audren, Simon Prunet, Jesus Torrado, Miguel Zumalacarregui, Francesco
