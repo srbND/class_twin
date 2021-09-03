@@ -910,6 +910,64 @@ int input_read_parameters(
 
   Omega_tot += pba->Omega0_cdm;
 
+
+  /** -------------------------------- START #TWIN SECTOR ------------------------------ */
+  /** TWIN - r_all_twin = Omega_0_twin/Omega_0_CDM */
+  class_call(parser_read_double(pfc,"r_all_twin",&param1,&flag1,errmsg),
+              errmsg,
+              errmsg);
+      if (flag1 == _TRUE_)
+        pba->r_all_twin = param1;
+      
+  /* TWIN read N_twin */
+  class_call(parser_read_double(pfc,"Delta_N_twin",&param1,&flag1,errmsg),
+              errmsg,
+              errmsg);
+      if (flag1 == _TRUE_) {
+        pba->Delta_N_twin = param1;
+      }
+      
+  class_call(parser_read_double(pfc,"ratio_vev_twin",&param1,&flag1,errmsg),
+              errmsg,
+              errmsg);
+      if (flag1 == _TRUE_) {
+        pba->ratio_vev_twin = param1;
+      }
+      
+    /* If any one of the twin parameters is zero, the code completely ignores the twin sector */  
+    if(((pba->r_all_twin != 0.) || (pba->Delta_N_twin != 0.)||(pba->ratio_vev_twin != 0.)) && (pba->r_all_twin)*(pba->Delta_N_twin)*(pba->ratio_vev_twin)==0.){
+          printf("-->[Twin Warning:] All the input parameters for the twin sector should be non-zero in .ini file.\n   Completely ignoring the twin sector!\n");
+          pba->r_all_twin = 0.;
+          pba->Delta_N_twin = 0.;
+          pba->ratio_vev_twin = 0.;
+      };
+      
+    if(pba->r_all_twin!=0.){
+      if (input_verbose > 0){
+        printf("TWIN: DNeff = %e; VeV = %e; r_all = %e. \n",pba->Delta_N_twin,pba->ratio_vev_twin,pba->r_all_twin );
+      }
+      pba->T0_twin = pba->T_cmb*pow(pba->Delta_N_twin/7.4,1./4.);
+      pba->T0_ur_twin = pow(4./11.,1./3.)*pba->T0_twin;
+      pba->Omega0_g_twin = pow(pba->T0_twin/pba->T_cmb,4.)*pba->Omega0_g;
+      pba->Omega0_ur_twin = 7./8.*3*pow(pba->T0_ur_twin/pba->T_cmb,4.)*pba->Omega0_g;
+      pba->Omega0_b_twin = pba->r_all_twin*pba->Omega0_cdm-pba->Omega0_g_twin-pba->Omega0_ur_twin;
+
+      pba->Omega0_ur += pba->Omega0_ur_twin;
+      /* remove the contribution of twin baryons from Omega0_cdm */
+      pba->Omega0_cdm -= pba->Omega0_b_twin;
+      /** Begin #IDM-DR-TWIN*/
+      if(pba->Omega0_idr > 0.){
+        printf("-->[Twin Warning:] Found Omega_idr > 0 (%f) & Omega_Twin > 0 (%f) . Cannot run both IDM-DR and Twin models models simultaneously. Ignoring IDR! \n", pba->Omega0_idr, pba->Omega0_g_twin);
+        Omega_tot -= pba->Omega0_idr;
+      }
+      pba->Omega0_idr = pba->Omega0_g_twin;
+      pba->T_idr = pba->T0_twin;
+      Omega_tot += pba->Omega0_idr;
+    };
+        /** End IDM-DR-TWIN*/
+      
+  /** ----------------------------------- END TWIN SECTOR ------------------------------- */
+
   /** - Omega_0_icdm_dr (DM interacting with DR) */
   class_call(parser_read_double(pfc,"Omega_idm_dr",&param1,&flag1,errmsg),
              errmsg,
