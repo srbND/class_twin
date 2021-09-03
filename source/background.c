@@ -435,7 +435,7 @@ int background_functions(
   }
 
   /* interacting dark matter */
-  if (pba->has_idm_dr == _TRUE_) {
+  if (pba->has_idm_dr == _TRUE_ && pba->has_twin == _FALSE_) {
     pvecback[pba->index_bg_rho_idm_dr] = pba->Omega0_idm_dr * pow(pba->H0,2) / pow(a_rel,3);
     rho_tot += pvecback[pba->index_bg_rho_idm_dr];
     p_tot += 0.;
@@ -443,12 +443,33 @@ int background_functions(
   }
 
   /* interacting dark radiation */
-  if (pba->has_idr == _TRUE_) {
+  if (pba->has_idr == _TRUE_ && pba->has_twin == _FALSE_) {
     pvecback[pba->index_bg_rho_idr] = pba->Omega0_idr * pow(pba->H0,2) / pow(a_rel,4);
     rho_tot += pvecback[pba->index_bg_rho_idr];
     p_tot += (1./3.) * pvecback[pba->index_bg_rho_idr];
     rho_r += pvecback[pba->index_bg_rho_idr];
   }
+
+  /** START #TWIN SECTOR */
+  if (pba->has_twin == _TRUE_) {
+    /* TWIN  photons */
+    pvecback[pba->index_bg_rho_g_twin] = pba->Omega0_g_twin * pow(pba->H0,2) / pow(a_rel,4);
+    rho_tot += pvecback[pba->index_bg_rho_g_twin];
+    p_tot += (1./3.) * pvecback[pba->index_bg_rho_g_twin];
+    rho_r += pvecback[pba->index_bg_rho_g_twin];
+                             
+    /* TWIN  relativistic neutrinos  */
+    pvecback[pba->index_bg_rho_ur_twin] = pba->Omega0_ur_twin * pow(pba->H0,2) / pow(a_rel,4);
+    // Twin neutrinos have already been added to Omega_ur
+                             
+    /* TWIN baryons */
+    pvecback[pba->index_bg_rho_b_twin] = pba->Omega0_b_twin * pow(pba->H0,2) / pow(a_rel,3);
+    rho_tot += pvecback[pba->index_bg_rho_b_twin];
+    p_tot += 0;
+    rho_m += pvecback[pba->index_bg_rho_b_twin];
+  }
+   /** END TWIN SECTOR */
+
 
   /** - compute expansion rate H from Friedmann equation: this is the
       only place where the Friedmann equation is assumed. Remember
@@ -548,7 +569,12 @@ int background_w_fld(
     Omega_r = pba->Omega0_g * (1. + 3.046 * 7./8.*pow(4./11.,4./3.)); // assumes LambdaCDM + eventually massive neutrinos so light that they are relativistic at equality; needs to be generalised later on.
     Omega_m = pba->Omega0_b;
     if (pba->has_cdm == _TRUE_) Omega_m += pba->Omega0_cdm;
-    if (pba->has_idm_dr == _TRUE_) Omega_m += pba->Omega0_idm_dr;
+    
+    /** START #TWIN SECTOR */
+    if (pba->has_twin == _TRUE_) Omega_m += pba->Omega0_b_twin;
+    /** END TWIN SECTOR */
+    
+    if (pba->has_idm_dr == _TRUE_  && pba->has_twin == _FALSE_) Omega_m += pba->Omega0_idm_dr;
     if (pba->has_dcdm == _TRUE_)
       class_stop(pba->error_message,"Early Dark Energy not compatible with decaying Dark Matter because we omitted to code the calculation of a_eq in that case, but it would not be difficult to add it if necessary, should be a matter of 5 minutes");
     a_eq = Omega_r/Omega_m; // assumes a flat universe with a=1 today
@@ -633,7 +659,7 @@ int background_init(
     printf("Computing background\n");
 
     /* below we want to inform the user about ncdm species and/or the total N_eff */
-    if ((pba->N_ncdm > 0) || (pba->Omega0_idr != 0.))  {
+    if ((pba->N_ncdm > 0) || (pba->Omega0_idr != 0. && pba->r_all_twin == 0.))  {
 
       /* contribution of ultra-relativistic species _ur to N_eff */
       Neff = pba->Omega0_ur/7.*8./pow(4./11.,4./3.)/pba->Omega0_g;
@@ -683,7 +709,7 @@ int background_init(
       }
 
       /* contribution of interacting dark radiation _idr to N_eff */
-      if (pba->Omega0_idr != 0.) {
+      if (pba->Omega0_idr != 0. && pba->r_all_twin == 0.) {
         N_dark = pba->Omega0_idr/7.*8./pow(4./11.,4./3.)/pba->Omega0_g;
         Neff += N_dark;
         printf(" -> dark radiation Delta Neff %e\n",N_dark);
@@ -693,6 +719,21 @@ int background_init(
 
     }
   }
+
+  /** START #TWIN SECTOR */
+  /* TWIN Print the Neff total and other twin quantities */
+  if (pba->r_all_twin != 0.) {
+    Neff += pba->Omega0_g_twin/7.*8./pow(4./11.,4./3.)/pba->Omega0_g;
+    if (pba->background_verbose > 0) {
+      printf(" -> total N_eff = %g (sumed over ultra-relativistic species, ncdm, dark radiation and  twin sector.)\n",Neff);
+      printf(" -> Omega0_b_twin = %g \n",pba->Omega0_b_twin);
+      printf(" -> Omega0_g_twin = %g \n",pba->Omega0_g_twin);
+      printf(" -> Omega0_ur_twin = %g \n",pba->Omega0_ur_twin);
+      printf(" -> T0_twin = %g K\n",pba->T0_twin);
+      printf(" -> T0_ur_twin = %g K\n",pba->T0_ur_twin);
+    }
+  }
+  /** END TWIN SECTOR */
 
   /** - if shooting failed during input, catch the error here */
   class_test_except(pba->shooting_failed == _TRUE_,
@@ -887,6 +928,11 @@ int background_indices(
   pba->has_idm_dr = _FALSE_;
   pba->has_curvature = _FALSE_;
 
+  /** START #TWIN SECTOR */
+  /* TWIN: Initializing the twin flag */
+  pba->has_twin = _FALSE_;
+  /** END TWIN SECTOR */
+
   if (pba->Omega0_cdm != 0.)
     pba->has_cdm = _TRUE_;
 
@@ -919,6 +965,16 @@ int background_indices(
 
   if (pba->sgnK != 0)
     pba->has_curvature = _TRUE_;
+
+  /** START #TWIN SECTOR */
+  /* TWIN: Turning on "has_twin" flag */
+  if (pba->r_all_twin!=0)
+  {
+    pba->has_twin = _TRUE_;
+      pba->has_idm_dr = _FALSE_;
+      pba->has_idr = _FALSE_;
+  }
+  /** END TWIN SECTOR */
 
   /** - initialize all indices */
 
@@ -999,6 +1055,24 @@ int background_indices(
   /*    */
   /*    */
 
+  /** START #TWIN SECTOR */
+  /* Assign twin baryon rho index to idm_dr*/
+  class_define_index(pba->index_bg_rho_idr,pba->has_twin,index_bg,0);
+
+  /* TWIN index for rho_g_twin (mirror photon density) */
+  class_define_index(pba->index_bg_rho_g_twin, pba->has_twin, index_bg,1);
+    
+  /* TWIN index for rho_ur_twin (mirror neutrinos density) */
+  class_define_index(pba->index_bg_rho_ur_twin, pba->has_twin, index_bg,1);
+  
+  /* Assign twin baryon rho index to idm_dr*/
+  class_define_index(pba->index_bg_rho_idm_dr,pba->has_twin,index_bg,0);
+    
+  /* TWIN index for rho_b_twin (mirror baryon density) */
+  class_define_index(pba->index_bg_rho_b_twin, pba->has_twin, index_bg,1);
+
+  /** END TWIN SECTOR */
+
   /* - end of indices in the normal vector of background values */
   pba->bg_size_normal = index_bg;
 
@@ -1034,6 +1108,12 @@ int background_indices(
   /* -> put here additional quantities describing background */
   /*    */
   /*    */
+
+  /** START #TWIN SECTOR */
+  /* TWIN - index for conformal sound horizon (mirror) */
+  class_define_index(pba->index_bg_rs_twin, pba->has_twin, index_bg,1);
+
+  /** END TWIN SECTOR */
 
   /* -> end of indices in the long vector of background values */
   pba->bg_size = index_bg;
@@ -1072,6 +1152,11 @@ int background_indices(
   class_define_index(pba->index_bi_D,_TRUE_,index_bi,1);
   class_define_index(pba->index_bi_D_prime,_TRUE_,index_bi,1);
 
+  /** START #TWIN SECTOR */
+  /* TWIN - index for sound horizon of the mirror sector */
+  class_define_index(pba->index_bi_rs_twin, pba->has_twin, index_bi,1);
+  /** END TWIN SECTOR */
+  
   /* -> index for conformal time in vector of variables to integrate */
   class_define_index(pba->index_bi_tau,_TRUE_,index_bi,1);
 
@@ -1834,6 +1919,13 @@ int background_solve(
     pvecback[pba->index_bg_lum_distance] = pba->a_today*comoving_radius*(1.+pba->z_table[i]);
     pvecback[pba->index_bg_rs] = pData[i*pba->bi_size+pba->index_bi_rs];
 
+    /** START #TWIN SECTOR */
+    /* TWIN - index for sound horizon (mirror) */
+    if (pba->has_twin == _TRUE_) {
+    pvecback[pba->index_bg_rs_twin] = pData[i*pba->bi_size+pba->index_bi_rs_twin];
+    }
+    /** END TWIN SECTOR */
+
     /* -> compute all other quantities depending only on {B} variables.
        The value of {B} variables in pData are also copied to pvecback.*/
     class_call(background_functions(pba,pData+i*pba->bi_size, pba->long_info, pvecback),
@@ -2022,6 +2114,12 @@ int background_initial_conditions(
     Omega_rad += pba->Omega0_ur;
   if (pba->has_idr == _TRUE_)
     Omega_rad += pba->Omega0_idr;
+
+  /** START #TWIN SECTOR */
+  if (pba->has_twin == _TRUE_)
+    Omega_rad += pba->Omega0_g_twin;
+  /** END TWIN SECTOR */
+  
   rho_rad = Omega_rad*pow(pba->H0,2)/pow(a/pba->a_today,4);
   if (pba->has_ncdm == _TRUE_){
     /** - We must add the relativistic contribution from NCDM species */
@@ -2138,6 +2236,13 @@ int background_initial_conditions(
 
   /** - compute initial sound horizon, assuming \f$ c_s=1/\sqrt{3} \f$ initially */
   pvecback_integration[pba->index_bi_rs] = pvecback_integration[pba->index_bi_tau]/sqrt(3.);
+  
+  /** START #TWIN SECTOR */
+  /* TWIN - compute initial sound horizon, assuming \f$ c_s=1/\sqrt{3} \f$ initially (twin) */
+  if (pba->has_twin == _TRUE_) {
+  pvecback_integration[pba->index_bi_rs_twin] = pvecback_integration[pba->index_bi_tau]/sqrt(3.);
+  }
+  /** END TWIN SECTOR */
 
   /** - set initial value of D and D' in RD. D will be renormalised later, but D' must be correct. */
   pvecback_integration[pba->index_bi_D] = a;
@@ -2267,6 +2372,15 @@ int background_output_titles(struct background * pba,
   class_store_columntitle(titles,"(.)rho_dcdm",pba->has_dcdm);
   class_store_columntitle(titles,"(.)rho_dr",pba->has_dr);
 
+  /** START #TWIN SECTOR */
+  /* TWIN - index for rho_g_twin (mirror photon density) */
+  class_store_columntitle(titles,"(.)rho_g_twin",pba->has_twin);
+  class_store_columntitle(titles,"(.)rho_ur_twin",pba->has_twin);
+  class_store_columntitle(titles,"(.)rho_b_twin",pba->has_twin);
+  class_store_columntitle(titles,"(.)rho_idr",pba->has_twin);
+  class_store_columntitle(titles,"(.)rho_idm_dr",pba->has_twin);
+  /** END TWIN SECTOR */
+
   class_store_columntitle(titles,"(.)rho_scf",pba->has_scf);
   class_store_columntitle(titles,"(.)p_scf",pba->has_scf);
   class_store_columntitle(titles,"(.)p_prime_scf",pba->has_scf);
@@ -2325,6 +2439,16 @@ int background_output_data(
     class_store_double(dataptr,pvecback[pba->index_bg_rho_crit],_TRUE_,storeidx);
     class_store_double(dataptr,pvecback[pba->index_bg_rho_dcdm],pba->has_dcdm,storeidx);
     class_store_double(dataptr,pvecback[pba->index_bg_rho_dr],pba->has_dr,storeidx);
+
+    /** START #TWIN SECTOR */
+    /* TWIN - index for rho_g_twin (mirror photon density) */
+    class_store_double(dataptr,pvecback[pba->index_bg_rho_g_twin],pba->has_twin,storeidx);
+    class_store_double(dataptr,pvecback[pba->index_bg_rho_ur_twin],pba->has_twin,storeidx);
+    class_store_double(dataptr,pvecback[pba->index_bg_rho_b_twin],pba->has_twin,storeidx);
+    class_store_double(dataptr,pvecback[pba->index_bg_rho_idr],pba->has_twin,storeidx);
+    class_store_double(dataptr,pvecback[pba->index_bg_rho_idm_dr],pba->has_twin,storeidx);
+    /** END TWIN SECTOR */
+
 
     class_store_double(dataptr,pvecback[pba->index_bg_rho_scf],pba->has_scf,storeidx);
     class_store_double(dataptr,pvecback[pba->index_bg_p_scf],pba->has_scf,storeidx);
@@ -2415,10 +2539,23 @@ int background_derivs(
   /** - calculate \f$ rs' = c_s \f$*/
   dy[pba->index_bi_rs] = 1./sqrt(3.*(1.+3.*pvecback[pba->index_bg_rho_b]/4./pvecback[pba->index_bg_rho_g]))*sqrt(1.-pba->K*y[pba->index_bi_rs]*y[pba->index_bi_rs]); // TBC: curvature correction
 
+  /** START #TWIN SECTOR */
+  /* TWIN - - calculate \f$ rs' = c_s \f$ (twin) */
+  if (pba->has_twin == _TRUE_) {
+  dy[pba->index_bi_rs_twin] = 1./sqrt(3.*(1.+3.*pvecback[pba->index_bg_rho_b_twin]/4./pvecback[pba->index_bg_rho_g_twin]))*sqrt(1.-pba->K*y[pba->index_bi_rs_twin]*y[pba->index_bi_rs_twin]);
+  }
+  /** END TWIN SECTOR */
+
   /** - solve second order growth equation  \f$ [D''(\tau)=-aHD'(\tau)+3/2 a^2 \rho_M D(\tau) \f$ */
   rho_M = pvecback[pba->index_bg_rho_b];
   if (pba->has_cdm)
     rho_M += pvecback[pba->index_bg_rho_cdm];
+
+  /** START #TWIN SECTOR */
+  if (pba->has_twin)
+    rho_M += pvecback[pba->index_bg_rho_b_twin];
+  /** END TWIN SECTOR */
+      
   if (pba->has_idm_dr)
     rho_M += pvecback[pba->index_bg_rho_idm_dr];
 
@@ -2631,6 +2768,17 @@ int background_output_budget(
       _class_print_species_("Ultra-relativistic relics",ur);
       budget_radiation+=pba->Omega0_ur;
     }
+
+    /** START #TWIN SECTOR */
+    /* TWIN - index for rho_g_twin (mirror photon density) */
+    if(pba->has_twin){
+      _class_print_species_("Twin photon relics",g_twin);
+      _class_print_species_("Twin neutrino relics",ur_twin);
+      budget_radiation += pba->Omega0_g_twin;
+      budget_matter+=pba->Omega0_b_twin;
+    }
+    /** END TWIN SECTOR */
+    
     if(pba->has_dr){
       _class_print_species_("Dark Radiation (from decay)",dr);
       budget_radiation+=pba->Omega0_dr;

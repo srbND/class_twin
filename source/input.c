@@ -910,6 +910,63 @@ int input_read_parameters(
 
   Omega_tot += pba->Omega0_cdm;
 
+
+  /** START #TWIN SECTOR */
+  /** TWIN - r_all_twin = Omega_0_twin/Omega_0_CDM */
+  class_call(parser_read_double(pfc,"r_all_twin",&param1,&flag1,errmsg),
+              errmsg,
+              errmsg);
+      if (flag1 == _TRUE_)
+        pba->r_all_twin = param1;
+      
+  /* TWIN read N_twin */
+  class_call(parser_read_double(pfc,"Delta_N_twin",&param1,&flag1,errmsg),
+              errmsg,
+              errmsg);
+      if (flag1 == _TRUE_) {
+        pba->Delta_N_twin = param1;
+      }
+      
+  class_call(parser_read_double(pfc,"ratio_vev_twin",&param1,&flag1,errmsg),
+              errmsg,
+              errmsg);
+      if (flag1 == _TRUE_) {
+        pba->ratio_vev_twin = param1;
+      }
+      
+    /* If any one of the twin parameters is zero, the code completely ignores the twin sector */  
+    if(((pba->r_all_twin != 0.) || (pba->Delta_N_twin != 0.)||(pba->ratio_vev_twin != 0.)) && (pba->r_all_twin)*(pba->Delta_N_twin)*(pba->ratio_vev_twin)==0.){
+          printf("-->[Twin Warning:] All the input parameters for the twin sector should be non-zero in .ini file.\n   Completely ignoring the twin sector!\n");
+          pba->r_all_twin = 0.;
+          pba->Delta_N_twin = 0.;
+          pba->ratio_vev_twin = 0.;
+      };
+      
+    if(pba->r_all_twin!=0.){
+      if (input_verbose > 0){
+        printf("TWIN: DNeff = %e; VeV = %e; r_all = %e. \n",pba->Delta_N_twin,pba->ratio_vev_twin,pba->r_all_twin );
+      }
+      pba->T0_twin = pba->T_cmb*pow(pba->Delta_N_twin/7.4,1./4.);
+      pba->T0_ur_twin = pow(4./11.,1./3.)*pba->T0_twin;
+      pba->Omega0_g_twin = pow(pba->T0_twin/pba->T_cmb,4.)*pba->Omega0_g;
+      pba->Omega0_ur_twin = 7./8.*3*pow(pba->T0_ur_twin/pba->T_cmb,4.)*pba->Omega0_g;
+      pba->Omega0_b_twin = pba->r_all_twin*pba->Omega0_cdm-pba->Omega0_g_twin-pba->Omega0_ur_twin;
+
+      pba->Omega0_ur += pba->Omega0_ur_twin;
+      /* remove the contribution of twin baryons from Omega0_cdm */
+      pba->Omega0_cdm -= pba->Omega0_b_twin;
+
+      if(pba->Omega0_idr > 0.){
+        printf("-->[Twin Warning:] Found Omega_idr > 0 (%f) & Omega_Twin > 0 (%f) . Cannot run both IDM-DR and Twin models models simultaneously. Ignoring IDR! \n", pba->Omega0_idr, pba->Omega0_g_twin);
+        Omega_tot -= pba->Omega0_idr;
+      }
+      pba->Omega0_idr = pba->Omega0_g_twin;
+      pba->T_idr = pba->T0_twin;
+      Omega_tot += pba->Omega0_idr;
+    };
+      
+  /** END TWIN SECTOR */
+
   /** - Omega_0_icdm_dr (DM interacting with DR) */
   class_call(parser_read_double(pfc,"Omega_idm_dr",&param1,&flag1,errmsg),
              errmsg,
@@ -950,9 +1007,25 @@ int input_read_parameters(
       Omega_tot += ppr->Omega0_cdm_min_synchronous;
       pba->Omega0_idm_dr -= ppr->Omega0_cdm_min_synchronous;
     }
+    /** START #TWIN SECTOR */
+    if(pba->r_all_twin!=0.){
+      pba->Omega0_cdm += pba->Omega0_idm_dr;
+      Omega_tot += pba->Omega0_idm_dr;
+    };
+    /** END TWIN SECTOR */
   }
-
+  
   Omega_tot += pba->Omega0_idm_dr;
+  
+  /** START #TWIN SECTOR */
+  if(pba->r_all_twin!=0.){
+    if(pba->Omega0_idm_dr>0.){
+      printf("-->[Twin Warning:] Found Omega_idm_dr > 0 & Omega_Twin > 0. Cannot run both IDM-DR and Twin models models simultaneously. Ignoring IDM! \n");
+      Omega_tot -= pba->Omega0_idm_dr;
+    };
+    pba->Omega0_idm_dr=pba->Omega0_b_twin;
+  };
+  /** END TWIN SECTOR */
 
   if (pba->Omega0_idm_dr > 0.) {
 
@@ -1605,6 +1678,22 @@ int input_read_parameters(
     }
   }
 
+  /** START #TWIN SECTOR */
+  /** TWIN primordial helium fraction in the mirror sector*/
+  class_call(parser_read_string(pfc,"YHe_twin",&string1,&flag1,errmsg),
+               errmsg,
+               errmsg);
+
+  if (flag1 == _TRUE_) {
+    if ((strstr(string1,"BBN") != NULL) || (strstr(string1,"bbn") != NULL)) {
+      pth->YHe_twin = _BBN_;
+    }
+    else {
+      class_read_double("YHe_twin",pth->YHe_twin);
+    }
+  }
+        
+  /** END TWIN SECTOR */
   /** (c) define which perturbations and sources should be computed, and down to which scale */
 
   ppt->has_perturbations = _FALSE_;
@@ -2798,6 +2887,12 @@ int input_read_parameters(
              errmsg);
   if (flag1 == _TRUE_){
     class_test(strlen(string1)>_FILENAMESIZE_-32,errmsg,"Root directory name is too long. Please install in other directory, or increase _FILENAMESIZE_ in common.h");
+    /** START #TWIN SECTOR */
+      // Setting Output file name.
+      if (pba->r_all_twin!=0){
+      sprintf(string1,"output/TwinOut_r%0.3f_v%0.2f_N%0.2f", pba->r_all_twin, pba->ratio_vev_twin, pba->Delta_N_twin);
+      };
+    /** END TWIN SECTOR */
     strcpy(pop->root,string1);
   }
 
@@ -3222,6 +3317,21 @@ int input_default_params(
 
   pba->shooting_failed = _FALSE_;
 
+  /** START #TWIN SECTOR */
+  /** TWIN background default */
+  pba->r_all_twin = 0.;
+  pba->Delta_N_twin = 0.;
+  pba->ratio_vev_twin = 0.;
+
+  /** TWIN background derived default */
+  pba->Omega0_b_twin = pba->r_all_twin*pba->Omega0_cdm;
+  pba->T0_twin = pba->T_cmb*pow(pba->Delta_N_twin/7.4,1./4.);
+  pba->T0_ur_twin = pow(4./11.,1./3.)*pba->T0_twin;
+  pba->Omega0_g_twin = pow(pba->T0_twin/pba->T_cmb,4.)*pba->Omega0_g;
+  pba->Omega0_ur_twin = 7./8.*3*pow(pba->T0_ur_twin/pba->T_cmb,4.)*pba->Omega0_g;
+
+  /** END TWIN SECTOR */
+  
   /** - thermodynamics structure */
 
   pth->YHe=_BBN_;
@@ -3259,6 +3369,10 @@ int input_default_params(
   pth->b_idr = 0.;
   pth->nindex_idm_dr = 4.;
   pth->m_idm = 1.e11;
+  /** START #TWIN SECTOR */
+  /** TWIN thermodynamics default */
+  pth->YHe_twin = _BBN_;
+  /** END TWIN SECTOR */
 
   /** - perturbation structure */
 

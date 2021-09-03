@@ -177,7 +177,7 @@ int thermodynamics_at_z(
     pvecthermo[pth->index_th_rate] = pvecthermo[pth->index_th_dkappa];
 
     /* quantities related to DM interacting with DR */
-    if(pba->has_idm_dr == _TRUE_){
+    if(pba->has_idm_dr == _TRUE_ && pba->has_twin == _FALSE_){
 
       /* calculate dmu_idm_dr and approximate its derivatives as zero */
       pvecthermo[pth->index_th_dmu_idm_dr] = pth->a_idm_dr*pow((1.+z)/1.e7,pth->nindex_idm_dr)*pba->Omega0_idm_dr*pow(pba->h,2);
@@ -206,6 +206,66 @@ int thermodynamics_at_z(
       /* calculate interacting dark matter temperature (equal to idr temperature at this redhsift) */
       pvecthermo[pth->index_th_Tidm_dr] = pba->T_idr*(1.+z);
     }
+
+
+    /** START #TWIN SECTOR */
+    if (pba->has_twin == _TRUE_){
+      double  x0_twin;
+          
+      /* ionization fraction assumed to remain constant at large z */
+      x0_twin= pth->thermodynamics_table[(pth->tt_size-1)*pth->th_size+pth->index_th_xe_twin];
+      pvecthermo[pth->index_th_xe_twin] = x0_twin;
+          
+      /* Calculate Tb */
+      pvecthermo[pth->index_th_Tb_twin] = pba->T0_twin*(1.+z);
+          
+      /* Calculate baryon equation of state parameter wb = (k_B/mu) Tb */
+      /* note that m_H / mu = 1 + (m_H/m_He-1) Y_p + x_e (1-Y_p) */
+      pvecthermo[pth->index_th_wb_twin] = _k_B_ / ( _c_ * _c_ * _m_H_twin ) * (1. + (1./_not4_ - 1.) * pth->YHe_twin + x0_twin * (1.-pth->YHe_twin)) * pba->T0_twin * (1.+z);
+          
+      /* Calculate baryon adiabatic sound speed cb2 = (k_B/mu) Tb (1-1/3 dlnTb/dlna) = (k_B/mu) Tb (1+1/3 (1+z) dlnTb/dz) */
+      /* note that m_H / mu = 1 + (m_H/m_He-1) Y_p + x_e (1-Y_p) */
+      pvecthermo[pth->index_th_cb2_twin] = pvecthermo[pth->index_th_wb_twin] * 4. / 3.;
+          
+      /* Calculate dkappa/dtau (dkappa/dtau = a n_e x_e sigma_T = a^{-2} n_e(today) x_e sigma_T in units of 1/Mpc) */
+      pvecthermo[pth->index_th_dkappa_twin] = (1.+z) * (1.+z) * pth->n_e_twin * x0_twin * _sigma_twin * _Mpc_over_m_;
+          
+          
+          
+      /* tau_d scales like (1+z)**2 */
+      pvecthermo[pth->index_th_tau_d_twin] = pth->thermodynamics_table[(pth->tt_size-1)*pth->th_size+pth->index_th_tau_d_twin]*pow((1+z)/(1.+pth->z_table[pth->tt_size-1]),2);
+          
+          
+      /* Calculate d2kappa/dtau2 = dz/dtau d/dz[dkappa/dtau] given that [dkappa/dtau] proportional to (1+z)^2 and dz/dtau = -H */
+      pvecthermo[pth->index_th_ddkappa_twin] = -pvecback[pba->index_bg_H] * 2. / (1.+z) * pvecthermo[pth->index_th_dkappa_twin];
+          
+      /* Calculate d3kappa/dtau3 given that [dkappa/dtau] proportional to (1+z)^2 */
+      pvecthermo[pth->index_th_dddkappa_twin] = (pvecback[pba->index_bg_H]*pvecback[pba->index_bg_H]/ (1.+z) - pvecback[pba->index_bg_H_prime]) * 2. / (1.+z) * pvecthermo[pth->index_th_dkappa_twin];
+          
+          
+      /* \f$ exp^{-\kappa}, g, g', g'' \f$ can be set to zero: they are
+       used only for computing the source functions in the
+       perturbation module; but source functions only need to be
+       sampled below z_initial (the condition that
+       z_start_sources<z_initial is checked in the perturbation
+       module) */
+      pvecthermo[pth->index_th_exp_m_kappa_twin] = 0.;
+      pvecthermo[pth->index_th_g_twin]=0.;
+      pvecthermo[pth->index_th_dg_twin]=0.;
+      pvecthermo[pth->index_th_ddg_twin]=0.;
+          
+      /* in this regime, variation rate = dkappa/dtau */
+      pvecthermo[pth->index_th_rate_twin] = pvecthermo[pth->index_th_dkappa_twin];
+          
+      //pvecthermo[pth->index_th_g_idm_dr] = pth->thermodynamics_table[(pth->tt_size-1)*pth->th_size+pth->index_th_g_idm_dr];
+          
+      pvecthermo[pth->index_th_dmu_idr] = 0;
+      pvecthermo[pth->index_th_tau_idr] = 0; // Not used in later modules
+
+    }
+      
+    /** END TWIN SECTOR */
+      
 
   }
 
@@ -295,7 +355,7 @@ int thermodynamics_init(
   /** - define local variables */
 
   /* index running over time*/
-  int index_tau;
+  int index_tau, index_tau_twin;
   /* temporary variables related to visibility function */
   double g;
   /* vector of background values for calling background_at_tau() */
@@ -351,6 +411,23 @@ int thermodynamics_init(
              pth->error_message,
              "Y_He=%g out of bounds (%g<Y_He<%g)",pth->YHe,_YHE_SMALL_,_YHE_BIG_);
 
+  /** START #TWIN SECTOR */
+  /* - Now calculate twin BBN abundances if needed */
+  if (pba->has_twin == _TRUE_) {
+  	if (pth->YHe_twin == _BBN_) {
+    	class_call(thermodynamics_twin_helium_from_bbn(ppr,pba,pth),
+               pth->error_message,
+               pth->error_message);
+    	if (pth->thermodynamics_verbose > 0)
+      		printf("Computing TWIN thermodynamics with Y_He_twin=%.4f\n",pth->YHe_twin);
+	    }
+  	else {
+    	if (pth->thermodynamics_verbose > 0)
+      		printf("\n");
+  	}
+  }
+  /** END TWIN SECTOR */
+    
   /** - check energy injection parameters */
 
   class_test((pth->annihilation<0),
@@ -436,6 +513,16 @@ int thermodynamics_init(
                     pth->error_message,
                     free(pvecback));
 
+  /** START #TWIN SECTOR */
+  /* - solve recombination for the mirror sector using thermodynamics_recombination_twin() */
+  if (pba->has_twin == _TRUE_) {
+        class_call_except(thermodynamics_recombination_twin(ppr,pba,pth,preco,pvecback),
+        pth->error_message,
+        pth->error_message,
+        free(pvecback));
+  }
+  /** END TWIN SECTOR */
+    
   /** - if there is reionization, solve reionization and store values of \f$ z, x_e, d \kappa / d \tau, T_b, c_b^2 \f$ with thermodynamics_reionization()*/
 
   if (pth->reio_parametrization != reio_none) {
@@ -494,6 +581,15 @@ int thermodynamics_init(
     pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_ddkappa] =
       -1./R*pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_dkappa];
 
+    /** START #TWIN SECTOR */
+    if (pba->has_twin == _TRUE_){
+      double R_twin;
+      R_twin = 3./4.*pvecback[pba->index_bg_rho_b_twin]/pvecback[pba->index_bg_rho_g_twin];
+      pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_ddkappa_twin] =
+      -1./R_twin*pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_dkappa_twin];
+      }
+      /** END TWIN SECTOR */
+      
     if(pba->has_idm_dr == _TRUE_) {
 
       /* - --> idr interaction rate with idm_dr (i.e. idr opacity to idm_dr scattering) */
@@ -542,6 +638,40 @@ int thermodynamics_init(
      will not be used anymore, so they can be overwritten by other
      intermediate steps of other computations */
 
+
+  /** START #TWIN SECTOR */
+  /* Computing TWIN Baryon drag optical depth */
+  /* - --> second derivative of this rate, -[1/R * kappa']'', stored temporarily in column dddkappa */
+  if (pba->has_twin == _TRUE_){
+    class_call(array_spline_table_line_to_line(tau_table,
+                                               pth->tt_size,
+                                               pth->thermodynamics_table,
+                                               pth->th_size,
+                                               pth->index_th_ddkappa_twin,
+                                               pth->index_th_dddkappa_twin,
+                                               _SPLINE_EST_DERIV_,
+                                               pth->error_message),
+               pth->error_message,
+               pth->error_message);
+        
+        
+    /** - --> compute tau_d = [int_{tau_today}^{tau} dtau -dkappa_d/dtau] */
+    class_call(array_integrate_spline_table_line_to_line(tau_table,
+                                                         pth->tt_size,
+                                                         pth->thermodynamics_table,
+                                                         pth->th_size,
+                                                         pth->index_th_ddkappa_twin,
+                                                         pth->index_th_dddkappa_twin,
+                                                         pth->index_th_tau_d_twin,
+                                                         pth->error_message),
+               pth->error_message,
+               pth->error_message);
+    /* the temporary quantities stored in columns ddkappa and dddkappa
+     will not be used anymore, so they can be overwritten by other
+     intermediate steps of other computations */
+  }
+  /** END TWIN SECTOR */
+  
   if(pba->has_idm_dr == _TRUE_){
 
     /** --> second derivative of idm_dr interaction rate (with idr), [Sinv*dmu_idm_dr]'', stored temporarily in column dddmu */
@@ -713,6 +843,46 @@ int thermodynamics_init(
              pth->error_message,
              pth->error_message);
 
+  /** START #TWIN SECTOR */
+  /* - --> second derivative with respect to tau of dkappa (in view of spline interpolation) */
+  if (pba->has_twin == _TRUE_){
+    class_call(array_spline_table_line_to_line(tau_table,
+                                               pth->tt_size,
+                                               pth->thermodynamics_table,
+                                               pth->th_size,
+                                               pth->index_th_dkappa_twin,
+                                               pth->index_th_dddkappa_twin,
+                                               _SPLINE_EST_DERIV_,
+                                               pth->error_message),
+               pth->error_message,
+               pth->error_message);
+        
+    /** - --> first derivative with respect to tau of dkappa (using spline interpolation) */
+    class_call(array_derive_spline_table_line_to_line(tau_table,
+                                                      pth->tt_size,
+                                                      pth->thermodynamics_table,
+                                                      pth->th_size,
+                                                      pth->index_th_dkappa_twin,
+                                                      pth->index_th_dddkappa_twin,
+                                                      pth->index_th_ddkappa_twin,
+                                                      pth->error_message),
+               pth->error_message,
+               pth->error_message);
+        
+    /** - --> compute -kappa = [int_{tau_today}^{tau} dtau dkappa/dtau], store temporarily in column "g" */
+    class_call(array_integrate_spline_table_line_to_line(tau_table,
+                                                       pth->tt_size,
+                                                       pth->thermodynamics_table,
+                                                       pth->th_size,
+                                                       pth->index_th_dkappa_twin,
+                                                       pth->index_th_dddkappa_twin,
+                                                       pth->index_th_g_twin,
+                                                       pth->error_message),
+             pth->error_message,
+             pth->error_message);
+  }
+  /** END TWIN SECTOR */
+
   /** - --> derivatives of baryon sound speed (only computed if some non-minimal tight-coupling schemes is requested) */
   if (pth->compute_cb2_derivatives == _TRUE_) {
 
@@ -816,6 +986,48 @@ int thermodynamics_init(
                           pth->error_message),
              pth->error_message,
              pth->error_message);
+
+
+  /** START #TWIN SECTOR */
+  /* - --> compute visibility: \f$ g= (d \kappa/d \tau) e^{- \kappa} \f$ */
+  if (pba->has_twin == _TRUE_){
+      double g_twin;
+      /* loop on z (decreasing z, increasing time) */
+      for (index_tau=pth->tt_size-1; index_tau>=0; index_tau--) {
+          
+        /** - ---> compute g */
+        g_twin = pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_dkappa_twin] *
+        exp(pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_g_twin]);
+            
+        /** - ---> store g */
+        pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_g_twin] = g_twin;
+            
+        /** - ---> compute variation rate */
+        class_test(pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_dkappa_twin] == 0.,
+                   pth->error_message,
+                   "variation rate diverges");
+            
+        pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_rate_twin] =
+        sqrt(pow(pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_dkappa_twin],2)
+             +pow(pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_ddkappa_twin]/
+                  pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_dkappa_twin],2)
+             +fabs(pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_dddkappa_twin]/
+                   pth->thermodynamics_table[index_tau*pth->th_size+pth->index_th_dkappa_twin]));
+      }
+        
+      /** - smooth the rate (details of smoothing unimportant: only the
+       order of magnitude of the rate matters) */
+      class_call(array_smooth(pth->thermodynamics_table,
+                              pth->th_size,
+                              pth->tt_size,
+                              pth->index_th_rate_twin,
+                              ppr->thermo_rate_smoothing_radius,
+                              pth->error_message),
+                 pth->error_message,
+                 pth->error_message);
+    }
+    /** END TWIN SECTOR */
+
 
   /* - ---> fill columns for ddmu_idm_dr and dddmu_idm_dr with true values, and compute idm_dr temperature and sound speed */
   if(pba->has_idm_dr == _TRUE_){
@@ -1127,6 +1339,90 @@ int thermodynamics_init(
     }
   }
 
+  /** START #TWIN SECTOR */
+  /* - find Tau free streaming for the twin sector */
+  int req_index;
+  double gmax;
+  if (pba->has_twin == _TRUE_){
+    double tau_twin, lowerg, upperg;
+    
+    index_tau_twin=pth->tt_size-1;
+    while (pth->z_table[index_tau_twin]>pth->Z_H_REC_MAX_twin) {
+      index_tau_twin--;
+    }
+    
+    gmax=pth->thermodynamics_table[index_tau_twin*pth->th_size+pth->index_th_g_twin];
+    req_index=index_tau_twin;
+    
+    while (pth->z_table[index_tau_twin]>_Z_REC_MIN_twin){
+      if(pth->thermodynamics_table[index_tau_twin*pth->th_size+pth->index_th_g_twin]>gmax){
+        gmax=pth->thermodynamics_table[index_tau_twin*pth->th_size+pth->index_th_g_twin];
+        req_index=index_tau_twin;
+      }
+      index_tau_twin--;
+    }
+    index_tau_twin=req_index;
+    
+    gmax = pth->thermodynamics_table[index_tau_twin*pth->th_size+pth->index_th_g_twin];
+    
+    if (index_tau_twin<100) {
+      pth->z_rec_twin = pth->Z_H_REC_MAX_twin;
+      if(pth->thermodynamics_verbose > 0){
+        printf(" ->[Twin Warning:] Could not find a reliable maxima of visibility function, showing approximate values.\n");
+      }
+    }
+    else{
+    /* approximation for maximum of g, using cubic interpolation, assuming equally spaced z's */
+    pth->z_rec_twin=pth->z_table[index_tau_twin+1]+0.5*(pth->z_table[index_tau_twin+1]-pth->z_table[index_tau_twin])*(pth->thermodynamics_table[(index_tau_twin)*pth->th_size+pth->index_th_g_twin]-pth->thermodynamics_table[(index_tau_twin+2)*pth->th_size+pth->index_th_g_twin])/(pth->thermodynamics_table[(index_tau_twin)*pth->th_size+pth->index_th_g_twin]-2.*pth->thermodynamics_table[(index_tau_twin+1)*pth->th_size+pth->index_th_g_twin]+pth->thermodynamics_table[(index_tau_twin+2)*pth->th_size+pth->index_th_g_twin]);
+    }
+    
+    /** - find conformal recombination time using background_tau_of_z() **/
+    if(pth->z_rec_twin<=0){pth->z_rec_twin=0.1;}
+    class_call(background_tau_of_z(pba,pth->z_rec_twin,&(pth->tau_rec_twin)),
+               pba->error_message,
+               pth->error_message);
+    
+    class_call(background_at_tau(pba,pth->tau_rec_twin, pba->long_info, pba->inter_normal, &last_index_back, pvecback),
+               pba->error_message,
+               pth->error_message);
+    
+    pth->rs_rec_twin=pvecback[pba->index_bg_rs_twin];
+    pth->ds_rec_twin=pth->rs_rec_twin*pba->a_today/(1.+pth->z_rec_twin);
+    pth->da_rec_twin=pvecback[pba->index_bg_ang_distance];
+    pth->ra_rec_twin=pth->da_rec_twin*(1.+pth->z_rec_twin)/pba->a_today;
+    pth->angular_rescaling_twin=pth->ra_rec_twin/(pba->conformal_age-pth->tau_rec_twin);
+    
+    
+    
+    /** - find time (always after recombination) at which tau_c/tau
+     falls below some threshold, defining tau_free_streaming */
+    
+    index_tau_twin=index_tau_fs-1;
+    //index_tau_twin=pth->tt_size-1; /** Starting from the beginning*/
+    /* CHECK THIS: comment: using index_tau_max (index_tau_fs) instead of pth->tt_size-1 ensures that the switch is always after recombination (free streaming) */
+    
+    class_call(background_tau_of_z(pba,pth->z_table[index_tau_twin],&tau_twin),
+               pba->error_message,
+               pth->error_message);
+    
+    while ((1./pth->thermodynamics_table[(index_tau_twin)*pth->th_size+pth->index_th_dkappa_twin]/tau_twin
+            < ppr->radiation_streaming_trigger_tau_c_over_tau)
+           && (index_tau_twin>0)) {
+      
+      index_tau_twin--;
+      
+      class_call(background_tau_of_z(pba,pth->z_table[index_tau_twin],&tau_twin),
+                 pba->error_message,
+                 pth->error_message);
+      
+    }
+    
+    pth->tau_free_streaming_twin = tau_twin;
+    
+  }
+  /** END TWIN SECTOR */
+ 
+
   /** - find z_star (when optical depth kappa crosses one, using linear
       interpolation) and sound horizon at that time */
 
@@ -1282,6 +1578,45 @@ int thermodynamics_init(
              tau_idm_dr_fs);
     }
   }
+  /** START #TWIN SECTOR */
+  if (pba->has_twin == _TRUE_) {
+    double tau_idr_twin;
+	  int i;
+    for( i=0; i<pth->tt_size; i++){
+      /* Not useful for now */
+      class_call(background_tau_of_z(pba,pth->z_table[i],&tau_idr_twin),
+                 pba->error_message,
+                 pth->error_message);
+          pth->thermodynamics_table[i*pth->th_size+pth->index_th_tau_idr]=0;
+          pth->thermodynamics_table[i*pth->th_size+pth->index_th_dmu_idr]=0;
+    }      
+  }
+    
+  if (pba->has_twin == _TRUE_) {
+    if (pth->thermodynamics_verbose > 0) {
+      printf(" -> TWIN recombination at z = %f (max of visibility function)\n",pth->z_rec_twin);
+      printf("    corresponding to conformal time = %f Mpc\n",pth->tau_rec_twin);
+      printf("    with comoving sound horizon = %f Mpc\n",pth->rs_rec_twin);
+      printf("    angular diameter distance = %f Mpc\n",pth->da_rec_twin);
+      printf("    and sound horizon angle 100*theta_s = %f\n",100.*pth->rs_rec_twin/pth->ra_rec_twin);
+      printf(" -> TWIN free-streaming approximation can be turned on as soon as tau=%g Mpc (z = %g)\n",
+             pth->tau_free_streaming_twin, pth->z_table[index_tau_twin]);
+    }
+    
+    pth->a_idm_dr = 0.1; // Not important, as only used with b_idr which is zero.
+    pth->b_idr = 0;
+    pth->tau_idr_free_streaming=pth->tau_free_streaming_twin;
+    
+  }
+  /** Turning on the IDM-DR Flags to calculate perturbations+ for the twin sector*/
+  if ((pba->has_twin) == _TRUE_) {
+    if (pth->thermodynamics_verbose > 0) {printf("TWIN: Setting 'has_idm' flag to TRUE.\n");}
+    short  *ba2 = &(pba->has_idm_dr);
+    *ba2 = _TRUE_;
+    short  *ba3 = &(pba->has_idr);
+    *ba3 = _TRUE_;
+  };
+  /** END TWIN SECTOR */
 
   free(pvecback);
 
@@ -1382,6 +1717,63 @@ int thermodynamics_indices(
     index++;
   }
 
+  /** START #TWIN SECTOR */
+  if (pba->has_twin == _TRUE_){
+    pth->index_th_xe_twin = index;
+    index++;
+    
+    pth->index_th_Tb_twin = index;
+    pth->index_th_Tidm_dr = index;
+    index++;
+    
+    pth->index_th_wb_twin = index;
+    index++;
+    
+    pth->index_th_cb2_twin = index;
+    pth->index_th_cidm_dr2 = index;
+    index++;
+    
+    pth->index_th_dkappa_twin = index;
+    pth->index_th_dmu_idm_dr = index;
+    index++;
+    
+    pth->index_th_tau_d_twin = index;
+    pth->index_th_tau_idm_dr = index;
+    index++;
+    
+    pth->index_th_ddkappa_twin = index;
+    pth->index_th_ddmu_idm_dr = index;
+    index++;
+    
+    pth->index_th_dddkappa_twin = index;
+    pth->index_th_dddmu_idm_dr = index;
+    index++;
+    
+    pth->index_th_exp_m_kappa_twin = index;
+    index++;
+    
+    pth->index_th_g_twin = index;
+    pth->index_th_g_idm_dr = index;
+    index++;
+    
+    pth->index_th_dg_twin = index;
+    index++;
+    
+    pth->index_th_ddg_twin = index;
+    index++;
+    
+    pth->index_th_rate_twin = index;
+    index++;
+      
+    pth->index_th_tau_idr = index;
+    index++;
+    
+    pth->index_th_dmu_idr = index;
+    index++;
+      
+  }
+  /** END TWIN SECTOR */
+   
   /* derivatives of baryon sound speed (only computed if some non-minimal tight-coupling schemes is requested) */
   if (pth->compute_cb2_derivatives == _TRUE_) {
     pth->index_th_dcb2 = index;
@@ -1419,6 +1811,28 @@ int thermodynamics_indices(
 
   /* end of indices */
   preco->re_size = index;
+
+  /** START #TWIN SECTOR */
+    if (pba->has_twin == _TRUE_) {
+        index = 0;
+        if (pba->has_twin == _TRUE_){
+            preco->index_re_z_twin = index;
+            index++;
+            preco->index_re_xe_twin = index;
+            index++;
+            preco->index_re_Tb_twin = index;
+            index++;
+            preco->index_re_wb_twin = index;
+            index++;
+            preco->index_re_cb2_twin = index;
+            index++;
+            preco->index_re_dkappadtau_twin = index;
+            index++;
+        }
+        preco->re_size_twin = index;
+    }
+  /** END TWIN SECTOR */
+  
 
   /** - initialization of all indices and flags in reionization structure */
   index = 0;
@@ -1757,6 +2171,208 @@ int thermodynamics_helium_from_bbn(
   return _SUCCESS_;
 
 }
+
+/** START #TWIN SECTOR */
+/**
+ * Infer the primordial twin helium fraction, as a
+ * function of the twin vev ratio and expansion rate during BBN.
+ *
+ * This module uses a fit to the twin BBN data provided externally.
+ *
+ * @param ppr Input: pointer to precision structure
+ * @param pba Input: pointer to background structure
+ * @param pth Input/Output: pointer to initialized thermo structure
+ * @return the error status
+ */
+int thermodynamics_twin_helium_from_bbn(
+                                   struct precision * ppr,
+                                   struct background * pba,
+                                   struct thermo * pth
+                                   ) {
+    
+    FILE * fA;
+    char line[_LINE_LENGTH_MAX_];
+    char * left;
+    
+    int num_deltaN=0;
+    int num_ratio_vev_twin=0;
+        
+    double * ratio_vev_twin=NULL;
+    double * deltaN_twin=NULL;
+    double * YHe_twin=NULL;
+    double * ddYHe_twin=NULL;
+    double * YHe_twin_at_deltaN=NULL;
+    double * ddYHe_twin_at_deltaN=NULL;
+    
+    int array_line=0;
+    int last_index;
+    double DeltaNeff;
+    double ratio_twin;
+    
+    /** - Rather than inferring effective number of neutrinos at the time of BBN */
+    /** - we set it externally.  */
+
+    ratio_twin = pba->ratio_vev_twin;
+    DeltaNeff = pba->Delta_N_twin;
+
+    /* DeltaNeff = Neff_bbn - 3.046;  (from usual BBN routine) */
+    
+    
+    /* Now do the twin BBN. The following file is assumed to contain (apart from comments and blank lines):
+     - the two numbers (num_ratio_vev_twin, num_deltaN) = number of values of BBN free parameters
+     - three columns (ratio_vev_twin, deltaN, YHe_twin) where deltaN = Neff-3.046 by definition
+     - ratio_vev_twin and deltaN are assumed to be arranged as:
+     ratio_vev_twin1 deltaN1 YHe_twin
+     ratio_vev_twin2 deltaN1 YHe_twin
+     .....
+     ratio_vev_twin1 delatN2 YHe_twin
+     ratio_vev_twin2 deltaN2 YHe_twin
+     .....
+     */
+    
+    class_open(fA,ppr->sBBN_twin_file, "r",pth->error_message);
+    
+    num_deltaN=0;
+    
+    /* go through each line */
+    while (fgets(line,_LINE_LENGTH_MAX_-1,fA) != NULL) {
+        
+        /* eliminate blank spaces at beginning of line */
+        left=line;
+        while (left[0]==' ') {
+            left++;
+        }
+        
+        /* check that the line is neither blank neither a comment. In
+         ASCII, left[0]>39 means that first non-blank character might
+         be the beginning of some data (it is not a newline, a #, a %,
+         etc.) */
+        if (left[0] > 39) {
+            
+            /* if the line contains data, we must interpret it. If
+             (num_omegab, num_deltaN)=(0,0), the current line must contain
+             their values. Otherwise, it must contain (omegab, delatN,
+             YHe). */
+            if ((num_ratio_vev_twin==0) && (num_deltaN==0)) {
+                
+                /* read (num_ratio_vev_twin, num_deltaN), infer size of arrays and allocate them */
+                class_test(sscanf(line,"%d %d",&num_ratio_vev_twin,&num_deltaN) != 2,
+                           pth->error_message,
+                           "could not read value of parameters (num_ratio_vev_twin,num_deltaN) in file %s\n",ppr->sBBN_twin_file);
+                
+                class_alloc(ratio_vev_twin,num_ratio_vev_twin*sizeof(double),pth->error_message);
+                class_alloc(deltaN_twin,num_deltaN*sizeof(double),pth->error_message);
+                class_alloc(YHe_twin,num_ratio_vev_twin*num_deltaN*sizeof(double),pth->error_message);
+                class_alloc(ddYHe_twin,num_ratio_vev_twin*num_deltaN*sizeof(double),pth->error_message);
+                class_alloc(YHe_twin_at_deltaN,num_ratio_vev_twin*sizeof(double),pth->error_message);
+                class_alloc(ddYHe_twin_at_deltaN,num_ratio_vev_twin*sizeof(double),pth->error_message);
+                array_line=0;
+                
+            }
+            else {
+                
+                /* read (ratio_vev_twin, deltaN, YHe_twin) */
+                class_test(sscanf(line,"%lg %lg %lg",
+                                  &(ratio_vev_twin[array_line%num_ratio_vev_twin]),
+                                  &(deltaN_twin[array_line/num_ratio_vev_twin]),
+                                  &(YHe_twin[array_line])
+                                  ) != 3,
+                           pth->error_message,
+                           "could not read value of parameters (ratio_vev_twin,deltaN,YHe_twin) in file %s\n",ppr->sBBN_twin_file);
+                array_line ++;
+            }
+        }
+    }
+    
+    fclose(fA);
+    
+    /** - spline in one dimension (along deltaN) */
+    class_call(array_spline_table_lines(deltaN_twin,
+                                        num_deltaN,
+                                        YHe_twin,
+                                        num_ratio_vev_twin,
+                                        ddYHe_twin,
+                                        _SPLINE_NATURAL_,
+                                        pth->error_message),
+               pth->error_message,
+               pth->error_message);
+        
+    class_test_except(ratio_twin < ratio_vev_twin[0],
+                      pth->error_message,
+                      free(ratio_vev_twin);free(deltaN_twin);free(YHe_twin);free(ddYHe_twin);free(YHe_twin_at_deltaN);free(ddYHe_twin_at_deltaN),
+                      "You have asked for an unrealistic small value ratio_twin_vev = %e. The corresponding value of the primordial twin helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe_twin to a given value rather than to BBN",
+                      ratio_twin);
+                      
+    class_test_except(ratio_twin > ratio_vev_twin[num_ratio_vev_twin-1],
+                      pth->error_message,
+                      free(ratio_vev_twin);free(deltaN_twin);free(YHe_twin);free(ddYHe_twin);free(YHe_twin_at_deltaN);free(ddYHe_twin_at_deltaN),
+                      "You have asked for an unrealistic small value ratio_twin_vev = %e. The corresponding value of the primordial twin helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe_twin to a given value rather than to BBN",
+                      ratio_twin);
+                                        
+    class_test_except(DeltaNeff < deltaN_twin[0],
+                      pth->error_message,
+                      free(ratio_vev_twin);free(deltaN_twin);free(YHe_twin);free(ddYHe_twin);free(YHe_twin_at_deltaN);free(ddYHe_twin_at_deltaN),
+                      "You have asked for an unrealistic small value of Delta N_eff = %e. The corresponding value of the primordial twin helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe_twin to a given value rather than to BBN",
+                      DeltaNeff);
+                                        
+    class_test_except(DeltaNeff > deltaN_twin[num_deltaN-1],
+                      pth->error_message,
+                      free(ratio_vev_twin);free(deltaN_twin);free(YHe_twin);free(ddYHe_twin);free(YHe_twin_at_deltaN);free(ddYHe_twin_at_deltaN),
+                      "You have asked for an unrealistic small value of Delta N_eff = %e. The corresponding value of the primordial twin helium fraction cannot be found in the interpolation table. If you really want this value, you should fix YHe_twin to a given value rather than to BBN",
+                      DeltaNeff);
+                                        
+    /** - interpolate in one dimension (along deltaN) */
+    class_call(array_interpolate_spline(deltaN_twin,
+                                        num_deltaN,
+                                        YHe_twin,
+                                        ddYHe_twin,
+                                        num_ratio_vev_twin,
+                                        DeltaNeff,
+                                        &last_index,
+                                        YHe_twin_at_deltaN,
+                                        num_ratio_vev_twin,
+                                        pth->error_message),
+               pth->error_message,
+               pth->error_message);
+    
+    /** - spline in remaining dimension (along ratio_vev_twin) */
+    class_call(array_spline_table_lines(ratio_vev_twin,
+                                        num_ratio_vev_twin,
+                                        YHe_twin_at_deltaN,
+                                        1,
+                                        ddYHe_twin_at_deltaN,
+                                        _SPLINE_NATURAL_,
+                                        pth->error_message),
+               pth->error_message,
+               pth->error_message);
+    
+    /** - interpolate in remaining dimension (along ratio_vev_twin) */
+    class_call(array_interpolate_spline(ratio_vev_twin,
+                                        num_ratio_vev_twin,
+                                        YHe_twin_at_deltaN,
+                                        ddYHe_twin_at_deltaN,
+                                        1,
+                                        ratio_twin,
+                                        &last_index,
+                                        &(pth->YHe_twin),
+                                        1,
+                                        pth->error_message),
+               pth->error_message,
+               pth->error_message);
+    
+    /** - deallocate arrays */    
+    free(ratio_vev_twin);
+    free(deltaN_twin);
+    free(YHe_twin);
+    free(ddYHe_twin);
+    free(YHe_twin_at_deltaN);
+    free(ddYHe_twin_at_deltaN);
+    
+    
+    return _SUCCESS_;
+    
+}
+/** END TWIN SECTOR */
 
 /**
  * In case of non-minimal cosmology, this function determines the
@@ -3814,6 +4430,238 @@ int thermodynamics_recombination_with_recfast(
   return _SUCCESS_;
 }
 
+/** START #TWIN SECTOR */
+/**
+ * Recombination for the twin sector - Uses the relations as given in arXiv:1803.03263v2
+ * The twin parameters are stored in recombination_table_twin.
+ * The redshift (z) values in this table are different from those in the SM recombination table.
+ * This is because one needs to go to much larger redshifts to see the recombination
+ * in the twin sector.
+ */
+
+int thermodynamics_recombination_twin(
+                                              struct precision * ppr,
+                                              struct background * pba,
+                                              struct thermo * pth,
+                                              struct recombination * preco,
+                                              double * pvecback
+                                              ) {
+
+
+  /** - define local variables */
+  /* vector of variables to be integrated: x_e, x_He, Tb*/
+  double y_twin[3],dy_twin[3] = {0,0,0};
+    
+  /* other recfast variables */
+  double x_e,OmegaB_twin,zinitial;
+  double x_H0_twin=0.,x_He0_twin;
+  double z,mu_H_twin;
+  double zstart,zend,rhs;
+  int i,Nz;
+  int flag[3]={1,1,1};
+  double ztmp_max, ztmp_min;
+
+  /* contains all quantities relevant for the integration algorithm */
+  struct generic_integrator_workspace gi;
+
+  /* contains all fixed parameters which should be passed to thermodynamics_derivs_with_recfast */
+  struct thermodynamics_parameters_and_workspace tpaw;
+
+  /** - initialize generic integrator with initialize_generic_integrator() */
+  class_call(initialize_generic_integrator(3, &gi),
+             gi.error_message,
+             pth->error_message);
+
+  /* preco->H0 is H0 in inverse seconds (while pba->H0 is [H0/c] in inverse Mpcs) */
+  preco->H0 = pba->H0 * _c_ / _Mpc_over_m_;
+
+  /* Omega_b */
+  OmegaB_twin = pba->Omega0_b_twin;
+
+  /* Yp */
+  preco->YHe_twin = pth->YHe_twin;
+
+  /* Tnow */
+  preco->Tnow_twin = pba->T0_twin;
+  
+  /**Constants related to twin recombination*/
+  preco->CR_twin = 2.*_PI_*(_m_e_twin/_h_P_)*(_k_B_/_h_P_);
+  preco->CB1_twin = _h_P_*_c_*_L_H_ion_twin/_k_B_;
+  preco->CB1_He1_twin = _h_P_*_c_*_L_He1_ion_twin/_k_B_;
+  preco->CB1_He2_twin = _h_P_*_c_*_L_He2_ion_twin/_k_B_;
+  preco->CT_twin = (8. / 3.) * (_sigma_twin / (_m_e_twin * _c_)) *
+                   (8. * pow(_PI_, 5) * pow(_k_B_, 4) / 15. / pow(_h_P_, 3) / pow(_c_, 3));
+  
+  /* z_initial (defined here)*/
+  /* Guess the maximum redshift that will be required */
+  zinitial=floor(preco->CB1_He2_twin/(preco->Tnow_twin*32));//ppr->recfast_z_initial;
+  if (zinitial<10000) {zinitial=10000;}
+  pth->z_reco_twin = zinitial;
+  
+  /** - allocate memory for thermodynamics interpolation tables (size defined here) */
+  preco->rt_size_twin = (int)floor(1.05*zinitial);
+  class_alloc(preco->recombination_table_twin,preco->re_size_twin*preco->rt_size_twin*sizeof(double),pth->error_message);
+
+  /* Nz */
+  Nz=preco->rt_size_twin/*pr->recfast_Nz0*/;
+  
+  
+  /* related quantities */
+  z=zinitial;
+  mu_H_twin = 1./(1.-preco->YHe_twin);
+  preco->fHe_twin = preco->YHe_twin/(_not4_ *(1.-preco->YHe_twin));
+  preco->Nnow_twin = 3.*preco->H0*preco->H0*OmegaB_twin/(8.*_PI_*_G_*mu_H_twin*_m_H_twin);
+  pth->n_e_twin = preco->Nnow_twin; /* Should we include the electrons in Helium ?? */
+  printf("\n H0 = %0.4e, OmegaB_twin = %0.4f, G = %0.4e, Nnow_twin = %0.4e, _sigma_twin = %0.4e, _Mpc_over_m_ = %0.4e\n", preco->H0, OmegaB_twin, _G_, preco->Nnow_twin, _sigma_twin, _Mpc_over_m_);
+  /** - define the fields of the 'thermodynamics parameter and workspace' structure */
+  tpaw.pba = pba;
+  tpaw.ppr = ppr;
+  tpaw.preco = preco;
+  tpaw.pvecback = pvecback;
+  preco->x_e_Lalpha=1; /**Used in the definition of Lambda_alpha_twin in derivs function to avoid fluctuations/flipping sign.
+                        Stores the last calculated value of x_e_twin*/
+    
+  /** - impose initial conditions at early times */
+  x_e = 1.+2.*preco->fHe_twin;
+  y_twin[0] = 1; /**Assuming that the Helium recombination is now complete */
+  y_twin[1] = 1.;
+  y_twin[2] = preco->Tnow_twin*(1.+z); /**Assuming that the Tb is same as T of dark photons */
+
+  /** Opening a file to store the output of recombination in a file (for Debugging) */
+  /*FILE *fTWINreco = fopen("recombination_twin.dat", "w");
+  fprintf(fTWINreco, "   z    \t   xe   \t Tb(K)  \t   wb   \t  cb2   \tdkappa_dtau\n");*/
+
+  /** - loop over redshift steps Nz; integrate over each step with
+      generic_integrator(), store the results in the table using
+      thermodynamics_derivs_twin()*/
+
+    for(i=0; i <Nz; i++) {
+        
+        zstart = zinitial * (double)(Nz-i) / (double)Nz;
+        zend   = zinitial * (double)(Nz-i-1) / (double)Nz;
+        
+        z = zend;
+        
+        
+        /**  First Helium recombination (Using Saha Equation) */
+        if (x_e>(1.+preco->fHe_twin)*1.0001) {
+            if(flag[0]==1 && x_e<(1.+2*preco->fHe_twin)*0.99)
+            { if (pth->thermodynamics_verbose > 0) {printf("Starting He III -> He II recombination at z = %0.2f",z);};flag[0]=0;}
+            x_H0_twin = 1.;
+            x_He0_twin = 1.;
+            
+            rhs = exp( 1.5*log(preco->CR_twin*preco->Tnow_twin/(1.+z)) - preco->CB1_He2_twin/(preco->Tnow_twin*(1.+z)) ) / preco->Nnow_twin;
+            
+            x_e = 0.5*(sqrt(pow((rhs-1.-preco->fHe_twin),2) + 4.*(1.+2.*preco->fHe_twin)*rhs) - (rhs-1.-preco->fHe_twin));
+            
+            y_twin[0] = 1;
+            y_twin[1] = 1;
+            y_twin[2] = preco->Tnow_twin*(1.+z); /**Assuming that the Tb is same as T of dark photons */
+            
+        }
+        /**  Second Helium recombination (Using Saha Equation) */
+        else if (x_e > 1.001) {
+              if(flag[1]==1)
+              { if (pth->thermodynamics_verbose > 0) {printf("\nStarting He II -> He I recombination at z = %0.2f",z);};flag[1]=0;}
+          
+          rhs = 4.*exp(1.5*log(preco->CR_twin*preco->Tnow_twin/(1.+z)) - preco->CB1_He1_twin/(preco->Tnow_twin*(1.+z)))/preco->Nnow_twin;
+          //rhs = 4.*exp(1.5*log(preco->CR_twin*1.4*preco->Tnow_twin/(1.+z)) - preco->CB1_He1_twin/(1.4*preco->Tnow_twin*(1.+z)))/preco->Nnow_twin;
+
+          x_He0_twin = 0.5*(sqrt(pow((rhs-1.),2) + 4.*(1.+preco->fHe_twin)*rhs )- (rhs-1.));
+
+          x_e = x_He0_twin;
+
+          x_He0_twin = (x_e-1.)/preco->fHe_twin;
+          y_twin[0] = 1;
+          y_twin[1] = x_He0_twin;
+          y_twin[2] = preco->Tnow_twin*(1.+z); /**Assuming that the Tb is same as T of dark photons */
+        }
+        /**  Hydrogen recombination */
+        else {
+            if(flag[2]==1)
+            { if (pth->thermodynamics_verbose > 0) {printf("\nComputing Hydrogen recombination ...");};flag[2]=0;
+                ztmp_max=z;
+            }
+            if (x_e > 0.1)
+            {
+              y_twin[2] = preco->Tnow_twin * (1. + z); /**Assuming that the Tb is same as T of mirror photons till x_e > 0.1*/
+            }
+            if(x_e > 0.99){
+                rhs = exp(1.5*log(preco->CR_twin*preco->Tnow_twin/(1.+z)) - preco->CB1_twin/(preco->Tnow_twin*(1.+z)))/preco->Nnow_twin;
+                x_e = 0.5*(sqrt(pow(rhs,2)+4.*rhs) - rhs);
+                y_twin[0]=x_e;
+                y_twin[2] = preco->Tnow_twin * (1. + z); /**Assuming that the Tb is same as T of dark photons */
+            }
+            else{
+            
+            class_call(generic_integrator(thermodynamics_derivs_twin,
+                                          zstart,
+                                          zend,
+                                          y_twin,
+                                          &tpaw,
+                                          ppr->tol_thermo_integration,
+                                          ppr->smallest_allowed_variation,
+                                          &gi),
+                       gi.error_message,
+                       pth->error_message);
+            x_e = y_twin[0];
+            if(y_twin[0] >= 0.9999){x_e = 1;} /**To avoid fluctuations*/
+            if(x_e > 0.7){ztmp_min=z;}
+            
+            preco->x_e_Lalpha=x_e;
+            }
+            
+        }
+        
+        /** - --> store the results in the table */
+        /* results are obtained in order of decreasing z, and stored in order of growing z */
+        
+        /* redshift */
+        *(preco->recombination_table_twin+(Nz-i-1)*preco->re_size_twin+preco->index_re_z_twin)=zend;
+        
+        /* ionization fraction */
+        *(preco->recombination_table_twin+(Nz-i-1)*preco->re_size_twin+preco->index_re_xe_twin)=x_e;
+        
+        /* Tb */
+        *(preco->recombination_table_twin+(Nz-i-1)*preco->re_size_twin+preco->index_re_Tb_twin)=y_twin[2];
+        
+        /* wb = (k_B/mu) Tb  = (k_B/mu) Tb */
+        *(preco->recombination_table_twin+(Nz-i-1)*preco->re_size_twin+preco->index_re_wb_twin)
+        = _k_B_ / ( _c_ * _c_ * _m_H_twin ) * (1. + (1./_not4_ - 1.) * preco->YHe_twin + x_e * (1.-preco->YHe_twin)) * y_twin[2];
+        
+        /* cb2 = (k_B/mu) Tb (1-1/3 dlnTb/dlna) = (k_B/mu) Tb (1+1/3 (1+z) dlnTb/dz) */
+        *(preco->recombination_table_twin+(Nz-i-1)*preco->re_size_twin+preco->index_re_cb2_twin)
+        = *(preco->recombination_table_twin+(Nz-i-1)*preco->re_size_twin+preco->index_re_wb_twin)
+        * (1. + (1.+zend) * dy_twin[2] / y_twin[2] / 3.);
+        
+        /* dkappa/dtau = a n_e x_e sigma_T = a^{-2} n_e(today) x_e sigma_T (in units of 1/Mpc) */
+        *(preco->recombination_table_twin+(Nz-i-1)*preco->re_size_twin+preco->index_re_dkappadtau_twin)
+        = (1.+zend) * (1.+zend) * preco->Nnow_twin * x_e * _sigma_twin * _Mpc_over_m_ ;
+        
+        /** writing to file recombination_twin.dat*/
+        /*fprintf(fTWINreco, "%0.2f\t%0.4f\t%0.4f\t%0.3e\t%0.3e\t%0.3e\n", preco->recombination_table_twin[(Nz-i-1)*preco->re_size_twin+preco->index_re_z_twin],
+         preco->recombination_table_twin[(Nz-i-1)*preco->re_size_twin+preco->index_re_xe_twin],
+         preco->recombination_table_twin[(Nz-i-1)*preco->re_size_twin+preco->index_re_Tb_twin]*_k_B_/_eV_,
+         preco->recombination_table_twin[(Nz-i-1)*preco->re_size_twin+preco->index_re_wb_twin],
+         preco->recombination_table_twin[(Nz-i-1)*preco->re_size_twin+preco->index_re_cb2_twin],
+         preco->recombination_table_twin[(Nz-i-1)*preco->re_size_twin+preco->index_re_dkappadtau_twin]); //Tb is in eV */
+        
+    }
+  if (pth->thermodynamics_verbose > 0) {printf("done!\n");}
+    /** Closing file*/
+    /*fclose(fTWINreco);*/
+    pth->Z_H_REC_MAX_twin=(ztmp_max+ztmp_min)/2;
+  /** - cleanup generic integrator with cleanup_generic_integrator() */
+
+  class_call(cleanup_generic_integrator(&gi),
+             gi.error_message,
+             pth->error_message);
+
+  return _SUCCESS_;
+}
+/** END TWIN SECTOR */
+
+
 /**
  * Subroutine evaluating the derivative with respect to redshift of
  * thermodynamical quantities (from RECFAST version 1.4).
@@ -4094,6 +4942,97 @@ int thermodynamics_derivs_with_recfast(
   return _SUCCESS_;
 }
 
+/** START #TWIN SECTOR */
+/**
+ * Derivs function for the Mirror Sector
+ * Called in thermodynamics_recombination_twin
+ */
+
+int thermodynamics_derivs_twin(
+                                       double z,
+                                       double * y_twin,
+                                       double * dy_twin,
+                                       void * parameters_and_workspace,
+                                       ErrorMsg error_message
+                                       ) {
+
+
+  /* define local variables */
+
+  double x,n_H,n_He,Trad,Tmat,Hz,xLaplha;
+
+  struct thermodynamics_parameters_and_workspace * ptpaw;
+  struct precision * ppr;
+  struct background * pba;
+  struct recombination * preco;
+  double * pvecback;
+
+  double tau;
+  int last_index_back;
+    
+  double lyman2_twin;
+  double beta_twin;
+  double Lambda_alpha_twin;
+  double Lambda_2gamma_twin;
+  double coeffXe_twin,coeffXe_twin_tmp;
+
+  ptpaw = parameters_and_workspace;
+  ppr = ptpaw->ppr;
+  pba = ptpaw->pba;
+  preco = ptpaw->preco;
+  pvecback = ptpaw->pvecback;
+    
+  /** Ground state energy of the twin helium  (in Joules) */
+  double epsilon0_twin = 13.6*_eV_*pba->ratio_vev_twin;
+  
+  x = y_twin[0]; /**x_e*/
+  Trad = preco->Tnow_twin * (1.+z);
+  Tmat = y_twin[2];
+  n_H = preco->Nnow_twin * (1.+z) * (1.+z) * (1.+z);
+  n_He = preco->fHe_twin * n_H;
+
+  class_call(background_tau_of_z(pba,
+                                    z,
+                                    &tau),
+                pba->error_message,
+                error_message);
+
+   class_call(background_at_tau(pba,
+                                  tau,
+                                  pba->short_info,
+                                  pba->inter_normal,
+                                  &last_index_back,
+                                  pvecback),
+                pba->error_message,
+                error_message);
+   /* Hz is H in inverse seconds (while pvecback returns [H0/c] in inverse Mpcs) */
+   Hz=pvecback[pba->index_bg_H]* _c_ / _Mpc_over_m_;
+    
+    
+  /** Local constants related to recombination*/
+  lyman2_twin = 0.448*(64.*_PI_/(sqrt(27.*_PI_)))*(pow(_eV_,4)/(pow(4*_PI_*_epsilon0_perm_,2)*pow(_m_e_twin,2)*pow(_c_,3)))*pow(epsilon0_twin/(_k_B_ *Trad),1./2.)*log(epsilon0_twin/(_k_B_*Trad));
+
+  beta_twin = (lyman2_twin/4)*pow(2.*_PI_*(_m_e_twin/_h_P_)*(_k_B_/_h_P_)*Trad,3./2.)*exp(-epsilon0_twin/(4*_k_B_*Trad));
+      
+  Lambda_2gamma_twin = 8.227*pba->ratio_vev_twin;
+  Lambda_alpha_twin = 8*_PI_*Hz*pow(3*epsilon0_twin/(4*_h_P_*_c_),3)/(n_H*(1-preco->x_e_Lalpha+0.0001));
+  coeffXe_twin = -((Lambda_alpha_twin + Lambda_2gamma_twin)/(Lambda_alpha_twin + Lambda_2gamma_twin + 4*beta_twin))*lyman2_twin;
+
+  dy_twin[0] = -1./(Hz*(1.+z))*coeffXe_twin*(n_H*pow(x,2)-(1-x)*pow(2.*_PI_*(_m_e_twin/_h_P_)*(_k_B_/_h_P_)*Trad,3./2.)*exp(-epsilon0_twin/(_k_B_*Trad)));
+  dy_twin[1]=0; /** Assumed to be zero for now. Will be updated later.*/
+  /* Twin baryon temperature */
+  if (x < 0.1)
+  {
+    dy_twin[2] = preco->CT_twin * pow(Trad, 4) * x / (1. + x + preco->fHe_twin) * (Tmat - Trad) / (Hz * (1. + z)) + 2. * Tmat / (1. + z);
+  }
+  else
+  {
+    dy_twin[2] = 0;
+  }
+  return _SUCCESS_;
+}
+/** END TWIN SECTOR */
+
 /**
  * This routine merges the two tables 'recombination_table' and
  * 'reionization_table' inside the table 'thermodynamics_table', and
@@ -4120,6 +5059,14 @@ int thermodynamics_merge_reco_and_reio(
   int i,index_th,index_re;
   double x0;
 
+  /** START #TWIN SECTOR */
+    double reco_largest_z = 0, z, x0_twin;
+    int additional_steps, reco_last_index;
+    double * z_table_twin; /**< vector z_table_twin[index_z] with values of redshift using in twin recombination (vector of size rt_size_twin) */
+    double * pvecreco;
+    int reco_last_index_twin; /**last_index which is used for interpolation*/
+  /** END TWIN SECTOR */
+    
   /** - first, a little check that the two tables match each other and can be merged */
 
   if (pth->reio_parametrization != reio_none) {
@@ -4137,6 +5084,30 @@ int thermodynamics_merge_reco_and_reio(
 
   if(pba->has_idm_dr == _TRUE_) pth->tt_size += ppr->thermo_Nz1_idm_dr + ppr->thermo_Nz2_idm_dr - 1;
 
+  /** START #TWIN SECTOR */
+  if (pba->has_twin == _TRUE_){
+    reco_largest_z=preco->recombination_table[(ppr->recfast_Nz0-1)*preco->re_size+preco->index_re_z];
+    if(pba->has_idm_dr == _FALSE_){
+      if(pth->z_reco_twin > reco_largest_z){
+        additional_steps = floor((pth->z_reco_twin-reco_largest_z)/0.5)-2;
+        pth->tt_size += additional_steps;
+        if(additional_steps > 0 && pth->thermodynamics_verbose > 0){
+          printf("Extended Thermodynamics table to %.2f by adding %d steps.\n",reco_largest_z + additional_steps*0.5,additional_steps);
+        }
+      }
+    }
+    
+    /**Storing the redshift values from recombination_table_twin() to z_table_twin*/
+    class_alloc(z_table_twin,preco->rt_size_twin*sizeof(double),pth->error_message);
+    for (i=0; i < preco->rt_size_twin; i++) {
+      z_table_twin[i]=
+      preco->recombination_table_twin[i*preco->re_size_twin+preco->index_re_z_twin];
+    }
+    class_alloc(pvecreco,preco->re_size_twin*sizeof(double),pth->error_message);
+  }
+  /** ----------------------------------- END TWIN SECTOR ------------------------------- */
+  
+  
   /** - allocate arrays in thermo structure */
 
   class_alloc(pth->z_table,pth->tt_size*sizeof(double),pth->error_message);
@@ -4182,7 +5153,7 @@ int thermodynamics_merge_reco_and_reio(
         exactly up to high redshift. With extrapolations in
         thermodynamics_at_z() we could not obtain this. */
 
-    if(pba->has_idm_dr == _TRUE_){
+    if(pba->has_idm_dr == _TRUE_ && pba->has_twin == _FALSE_){
 
       for (i=0; i<ppr->thermo_Nz2_idm_dr+ppr->thermo_Nz1_idm_dr-1; i++){
 
@@ -4207,10 +5178,65 @@ int thermodynamics_merge_reco_and_reio(
 
   }
 
+  /** START #TWIN SECTOR */
+  if (pba->has_twin == _TRUE_){
+    /* Finding the last index in the already filled thermodynamics_table. Note: the last FILLED index is (reco_last_index-1) */
+    reco_last_index=preio->rt_size+ppr->recfast_Nz0 - preio->index_reco_when_reio_start - 1;
+    if(pba->has_idm_dr == _FALSE_){
+      for (i=0; i < pth->tt_size; i++){
+        /* First filling the standard model values in the extended part of the table */
+        if(i > (reco_last_index-1)){
+          pth->z_table[i] = reco_largest_z + (i-reco_last_index+1)*0.5;
+          /* same extrapolation formulas as in thermodynamics_at_z() */
+          x0=pth->thermodynamics_table[(reco_last_index-1)*pth->th_size+pth->index_th_xe];
+          pth->thermodynamics_table[i*pth->th_size+pth->index_th_xe]=x0;
+          pth->thermodynamics_table[i*pth->th_size+pth->index_th_dkappa]=(1.+pth->z_table[i]) * (1.+pth->z_table[i]) * pth->n_e * x0 * _sigma_ * _Mpc_over_m_;
+          pth->thermodynamics_table[i*pth->th_size+pth->index_th_Tb]=pba->T_cmb*(1.+pth->z_table[i]);
+          pth->thermodynamics_table[i*pth->th_size+pth->index_th_wb]=_k_B_ / ( _c_ * _c_ * _m_H_ ) * (1. + (1./_not4_ - 1.) * pth->YHe + x0 * (1.-pth->YHe)) * pba->T_cmb * (1.+pth->z_table[i]);
+          pth->thermodynamics_table[i*pth->th_size+pth->index_th_cb2]=pth->thermodynamics_table[i*pth->th_size+pth->index_th_wb] * 4./3.;            
+        }
+                
+        /* Now filling the twin sector values in both the existing and extended parts of the table */
+        z = pth->z_table[i];
+        /* Interpolate the recombination_table_twin */
+        class_call(array_interpolate_linear(
+                                            z_table_twin,
+                                            preco->rt_size_twin,
+                                            preco->recombination_table_twin,
+                                            preco->re_size_twin,
+                                            z,
+                                            &reco_last_index_twin,
+                                            pvecreco,
+                                            preco->re_size_twin,
+                                            pth->error_message),
+                   pth->error_message,
+                   pth->error_message);
+        /* Saving twin parameters in thermodynamics_table */
+        pth->thermodynamics_table[i*pth->th_size+pth->index_th_xe_twin]=
+        pvecreco[preco->index_re_xe_twin];
+        pth->thermodynamics_table[i*pth->th_size+pth->index_th_Tb_twin]=
+        pvecreco[preco->index_re_Tb_twin];
+        pth->thermodynamics_table[i*pth->th_size+pth->index_th_wb_twin]=
+        pvecreco[preco->index_re_wb_twin];
+        pth->thermodynamics_table[i*pth->th_size+pth->index_th_cb2_twin]=
+        pvecreco[preco->index_re_cb2_twin];
+        pth->thermodynamics_table[i*pth->th_size+pth->index_th_dkappa_twin]=
+        pvecreco[preco->index_re_dkappadtau_twin];
+      }
+    }
+  }
+  /** END TWIN SECTOR */
+    
   /** - free the temporary structures */
 
   free(preco->recombination_table);
-
+  /** START #TWIN SECTOR */
+    if (pba->has_twin == _TRUE_) {
+        free(preco->recombination_table_twin);
+        free(z_table_twin);
+        free(pvecreco);
+    }
+  /** END TWIN SECTOR */
   if (pth->reio_parametrization != reio_none)
     free(preio->reionization_table);
 
@@ -4243,6 +5269,21 @@ int thermodynamics_output_titles(struct background * pba,
   //class_store_columntitle(titles,"max. rate",_TRUE_);
   class_store_columntitle(titles,"r_d",pth->compute_damping_scale);
 
+  /** START #TWIN SECTOR */
+  if(pba->has_twin == _TRUE_){
+    class_store_columntitle(titles,"x_e_twin",_TRUE_);
+    class_store_columntitle(titles,"kappa_twin'",_TRUE_);
+    //class_store_columntitle(titles,"ddmu_idm_dr",_TRUE_);
+    //class_store_columntitle(titles,"dddmu_idm_dr",_TRUE_);
+    class_store_columntitle(titles,"tau_d_twin",_TRUE_);
+    class_store_columntitle(titles,"g_twin",_TRUE_);
+    class_store_columntitle(titles,"c_b_twin^2",_TRUE_);
+    class_store_columntitle(titles,"Tb_twin",_TRUE_);
+    class_store_columntitle(titles,"tau_idr",_TRUE_);
+    class_store_columntitle(titles,"dmu_idr",_TRUE_);
+  }
+  /** END TWIN SECTOR */
+    
   if(pba->has_idm_dr == _TRUE_){
     class_store_columntitle(titles,"dmu_idm_dr",_TRUE_);
     //class_store_columntitle(titles,"ddmu_idm_dr",_TRUE_);
@@ -4304,6 +5345,19 @@ int thermodynamics_output_data(struct background * pba,
     //class_store_double(dataptr,pvecthermo[pth->index_th_rate],_TRUE_,storeidx);
     class_store_double(dataptr,pvecthermo[pth->index_th_r_d],pth->compute_damping_scale,storeidx);
 
+    /** START #TWIN SECTOR */
+    if(pba->has_twin == _TRUE_){
+      class_store_double(dataptr,pvecthermo[pth->index_th_xe_twin],pba->has_twin,storeidx);
+      class_store_double(dataptr,pvecthermo[pth->index_th_dkappa_twin],pba->has_twin,storeidx);
+      class_store_double(dataptr,pvecthermo[pth->index_th_tau_d_twin],pba->has_twin,storeidx);
+      class_store_double(dataptr,pvecthermo[pth->index_th_g_twin],pba->has_twin,storeidx);
+      class_store_double(dataptr,pvecthermo[pth->index_th_cb2_twin],pba->has_twin,storeidx);
+      class_store_double(dataptr,pvecthermo[pth->index_th_Tb_twin],pba->has_twin,storeidx);
+      class_store_double(dataptr,pvecthermo[pth->index_th_tau_idr],_TRUE_,storeidx);
+      class_store_double(dataptr,pvecthermo[pth->index_th_dmu_idr],_TRUE_,storeidx);
+    }
+    /** END TWIN SECTOR */
+    
     if(pba->has_idm_dr == _TRUE_){
       class_store_double(dataptr,pvecthermo[pth->index_th_dmu_idm_dr],_TRUE_,storeidx);
       //class_store_double(dataptr,pvecthermo[pth->index_th_ddmu_idm_dr],_TRUE_,storeidx);
