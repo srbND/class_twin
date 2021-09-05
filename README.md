@@ -5,7 +5,8 @@ This code (class_twin) can compute the evolution of the Universe for
 the Mirror Twin Higgs (MTH) model, i.e. when there exists a copy of 
 the SM in the Universe. It is based on the v2.9 of the CLASS code 
 (http://class-code.net), and all the compilation and other rules apply 
-here as well. 
+here as well. I would like to take this opportunity to thank the authors 
+of the CLASS code for producing and maintaining this amazing code.
 
 There are three input parameters, in addition to those of the $\Lambda$CDM
 model that are required to calculate the evolution of the Universe
