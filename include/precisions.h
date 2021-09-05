@@ -79,6 +79,11 @@ class_precision_parameter(Omega0_cdm_min_synchronous,double,1.e-10)
  */
 class_string_parameter(sBBN_file,"/bbn/sBBN_2017.dat","sBBN file")
 
+/**
+ * Twin version of Big Bang Nucleosynthesis file path.
+ */
+class_string_parameter(sBBN_twin_file,"/bbn/sBBN_twin.dat","sBBN_twin file")
+	
 /*
  *  Thermodynamical quantities
  * */
