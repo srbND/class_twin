@@ -943,9 +943,6 @@ int input_read_parameters(
       };
       
     if(pba->r_all_twin!=0.){
-      if (input_verbose > 0){
-        printf("TWIN: DNeff = %e; VeV = %e; r_all = %e. \n",pba->Delta_N_twin,pba->ratio_vev_twin,pba->r_all_twin );
-      }
       pba->T0_twin = pba->T_cmb*pow(pba->Delta_N_twin/7.4,1./4.);
       pba->T0_ur_twin = pow(4./11.,1./3.)*pba->T0_twin;
       pba->Omega0_g_twin = pow(pba->T0_twin/pba->T_cmb,4.)*pba->Omega0_g;
