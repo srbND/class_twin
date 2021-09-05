@@ -18,10 +18,10 @@ for the MTH model. These MTH specific parameters are:
 3. ratio_vev_twin: Vacuum expectation value (vev) of the twin sector as compared to that of the SM (range: [1, 15]). For instance: ratio_vev_twin = 3 implies vev of the twin sector is three times the vev of the SM.
 
 
-By default, class_twin assumes that there is not twin or mirror 
+By default, class_twin assumes that there is no twin or mirror 
 sector and thus, works just like the original CLASS code. To
-invoke the mirror, make sure that all the above mentioned three
-parameters are greater than 0. The easiest way to track the 
+invoke the MTH model, make sure that all the three parameters
+mentioned above are greater than 0. The easiest way to track the 
 changes made in the code is to search for "#TWIN".
 
 More details on this code can be found in the following paper:
