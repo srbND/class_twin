@@ -1,7 +1,32 @@
-CLASS for the Mirror Twin Higgs model:
+CLASS for the Mirror Twin Higgs model: class_twin
 ======================================
 
-UNDER CONSTRUCTION
+This code (class_twin) can compute the evolution of the Universe for 
+the Mirror Twin Higgs (MTH) model, i.e. when there exists a copy of 
+the SM in the Universe. It is based on the v2.9 of the CLASS code 
+(http://class-code.net), and all the compilation and other rules apply 
+here as well. 
+
+There are three input parameters, in addition to those of the $\Lambda$CDM
+model that are required to calculate the evolution of the Universe
+for the MTH model. These three parameters are:
+
+1. r_all_twin: ratio of amount of twin baryons to CDM (range: [0, 1])
+2. Delta_N_twin: contribution of 
+
+# 11.b) Delta N_eff due to twin twin sector (possible values: 0 to 1; default: 0)
+Delta_N_twin = 0.1
+
+# 11.c) Ratio of VEV of twin sector to the SM (possible values: 1 to 15; default: 0)
+ratio_vev_twin = 3
+More details on this code can be found in the following paper:
+*paper link to be updated*
+
+By default, class_twin assumes that there is not twin or mirror 
+sector and thus, works just like the original CLASS code. To
+invoke the mirror 
+
+
 
 CLASS: Cosmic Linear Anisotropy Solving System  {#mainpage}
 ==============================================
