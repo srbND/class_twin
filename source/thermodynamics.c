@@ -5091,7 +5091,7 @@ int thermodynamics_merge_reco_and_reio(
         additional_steps = floor((pth->z_reco_twin-reco_largest_z)/0.5)-2;
         pth->tt_size += additional_steps;
         if(additional_steps > 0 && pth->thermodynamics_verbose > 0){
-          printf("Extended Thermodynamics table to %.2f by adding %d steps.\n",reco_largest_z + additional_steps*0.5,additional_steps);
+          printf("Extended Thermodynamics table to z = %.2f by adding %d steps.\n",reco_largest_z + additional_steps*0.5,additional_steps);
         }
       }
     }
