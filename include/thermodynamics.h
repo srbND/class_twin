@@ -156,6 +156,11 @@ struct thermo
   double nindex_idm_dr; /**< temperature dependence of the interaction between dark matter and dark radiation */
   double m_idm;         /**< interacting dark matter mass */
 
+  /** START #TWIN SECTOR */
+  double YHe_twin;
+  double z_reco_twin; /** Approximate redshift below which H recombination takes place */
+  /** END TWIN SECTOR */
+	
   //@}
 
   /** @name - all indices for the vector of thermodynamical (=th) quantities stored in table */
@@ -189,6 +194,23 @@ struct thermo
   int index_th_r_d;           /**< simple analytic approximation to the photon comoving damping scale */
   int th_size;                /**< size of thermodynamics vector */
 
+  /** START #TWIN SECTOR */
+  /* TWIN: Thermodynamics indices and table */
+  int index_th_xe_twin;         /**< ionization fraction \f$ x_e \f$ */
+  int index_th_Tb_twin;         /**< baryon temperature \f$ T_b \f$ */
+  int index_th_wb_twin;         /**< baryon equation of state parameter \f$ w_b \f$ */
+  int index_th_cb2_twin;        /**< squared baryon adiabatic sound speed \f$ c_b^2 \f$ */
+  int index_th_dkappa_twin; /**< Thomson scattering rate \f$ d \kappa / d \tau \f$ (units 1/Mpc) */
+  int index_th_tau_d_twin;         /**< Baryon drag optical depth */
+  int index_th_ddkappa_twin;       /**< scattering rate derivative \f$ d^2 \kappa / d \tau^2 \f$ */
+  int index_th_dddkappa_twin;      /**< scattering rate second derivative \f$ d^3 \kappa / d \tau^3 \f$ */
+  int index_th_exp_m_kappa_twin;   /**< \f$ exp^{-\kappa} \f$ */
+  int index_th_g_twin;             /**< visibility function \f$ g = (d \kappa / d \tau) * exp^{-\kappa} \f$ */
+  int index_th_dg_twin;            /**< visibility function derivative \f$ (d g / d \tau) \f$ */
+  int index_th_ddg_twin;           /**< visibility function second derivative \f$ (d^2 g / d \tau^2) \f$ */
+  int index_th_rate_twin;          /**< maximum variation rate of \f$ exp^{-\kappa}\f$, g and \f$ (d g / d \tau) \f$, used for computing integration step in perturbation module */
+  /** END TWIN SECTOR */
+	
   //@}
 
   /** @name - thermodynamics interpolation tables */
@@ -258,6 +280,20 @@ struct thermo
 
   //@}
 
+ /** START #TWIN SECTOR */
+  double n_e_twin; /**< total number density of twin electrons today (free or not) */
+  double z_rec_twin;   /**< z at which the visibility reaches its maximum (= recombination redshift) */
+  double tau_rec_twin; /**< conformal time at which the visibility reaches its maximum (= recombination time) */
+  double rs_rec_twin;  /**< comoving sound horizon at recombination */
+  double ds_rec_twin;  /**< physical sound horizon at recombination */
+  double ra_rec_twin;  /**< conformal angular diameter distance to recombination */
+  double da_rec_twin;  /**< physical angular diameter distance to recombination */
+
+  double angular_rescaling_twin; /**< [ratio ra_rec / (tau0-tau_rec)]: gives CMB rescaling in angular space relative to flat model (=1 for curvature K=0) */
+  double tau_free_streaming_twin;     /**< minimum value of tau at which free-streaming approximation can be switched on */
+  double Z_H_REC_MAX_twin; /**< Redshift after which twin H recombination happens */
+  /** END TWIN SECTOR */
+
   /**
    *@name - some flags needed for thermodynamics functions
    */
@@ -313,6 +349,22 @@ struct recombination {
 
   //@}
 
+  /** START #TWIN SECTOR */
+  /* TWIN: Recombination indices and table */
+  int index_re_z_twin;          /**< redshift \f$ z \f$ */
+  int index_re_xe_twin;         /**< ionization fraction \f$ x_e \f$ */
+  int index_re_Tb_twin;         /**< baryon temperature \f$ T_b \f$ */
+  int index_re_wb_twin;         /**< baryon equation of state parameter \f$ w_b \f$ */
+  int index_re_cb2_twin;        /**< squared baryon adiabatic sound speed \f$ c_b^2 \f$ */
+  int index_re_dkappadtau_twin; /**< Thomson scattering rate \f$ d \kappa / d \tau \f$ (units 1/Mpc) */
+  int re_size_twin;             /**< size of this vector */
+      
+  int rt_size_twin; /**< number of lines (redshift steps) in the table . Defined in function thermodynamics_recombination_twin() of thermodynamics.c*/
+    
+  double * recombination_table_twin; /**< table recombination_table[index_z*preco->re_size_twin+index_re] with all other quantities (array of size preco->rt_size_twin*preco->re_size_twin) */
+
+  /** END TWIN SECTOR */
+	
   /** @name - recfast parameters needing to be passed to
       thermodynamics_derivs_with_recfast() routine */
 
@@ -338,6 +390,20 @@ struct recombination {
   double H0;  /**< defined as in RECFAST */
   double YHe; /**< defined as in RECFAST */
 
+  /** START #TWIN SECTOR */
+  /* TWIN Recombination parameters in recombination structure*/
+  double YHe_twin;
+  double Tnow_twin;
+  double fHe_twin;
+  double Nnow_twin;
+  double CR_twin;
+  double CB1_twin;
+  double CB1_He1_twin;
+  double CB1_He2_twin;
+  double x_e_Lalpha;
+  double CT_twin;
+  /** END TWIN SECTOR */
+	
   /* parameters for energy injection */
 
   double annihilation; /**< parameter describing CDM annihilation (f <sigma*v> / m_cdm, see e.g. 0905.0003) */
@@ -629,6 +695,31 @@ extern "C" {
                           double width,
                           double * result);
 
+  /** START #TWIN SECTOR */
+  /* Twin thermodynamics functions */	
+  int thermodynamics_twin_helium_from_bbn(
+                   struct precision * ppr,
+                   struct background * pba,
+                   struct thermo * pth
+                   );
+
+  int thermodynamics_derivs_twin(
+                          double z,
+                          double * y_twin,
+                          double * dy_twin,
+                          void * parameters_and_workspace,
+                          ErrorMsg error_message
+                          );
+  
+  int thermodynamics_recombination_twin(
+                          struct precision * ppr,
+                          struct background * pba,
+                          struct thermo * pth,
+                          struct recombination * prec,
+                          double * pvecback
+                          );
+  /** END TWIN SECTOR */
+	
 #ifdef __cplusplus
 }
 #endif
@@ -716,5 +807,16 @@ extern "C" {
 #define _Z_REC_MIN_ 500.
 
 //@}
+
+/** START #TWIN SECTOR */
+#define _m_H_twin _m_H_*pba->ratio_vev_twin /** Twin H mass*/
+#define _m_e_twin _m_e_*pba->ratio_vev_twin /** Twin electron mass*/
+#define _epsilon0_perm_ 8.8541878128e-12 /** Vacuum Permittivity*/
+#define _sigma_twin  _sigma_/pow(pba->ratio_vev_twin,2) /**< Twin Thomson cross-section in m^2 */
+#define _Z_REC_MIN_twin 1000.
+#define _L_H_ion_twin 1.096787737e7*pba->ratio_vev_twin
+#define _L_He1_ion_twin 1.98310772e7*pba->ratio_vev_twin
+#define _L_He2_ion_twin 4.389088863e7*pba->ratio_vev_twin
+/** END TWIN SECTOR */
 
 #endif
