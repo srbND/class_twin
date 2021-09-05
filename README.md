@@ -21,7 +21,8 @@ for the MTH model. These MTH specific parameters are:
 By default, class_twin assumes that there is not twin or mirror 
 sector and thus, works just like the original CLASS code. To
 invoke the mirror, make sure that all the above mentioned three
-parameters are greater than 0.
+parameters are greater than 0. The easiest way to track the 
+changes made in the code is to search for "#TWIN".
 
 More details on this code can be found in the following paper:
 *paper link to be updated*
