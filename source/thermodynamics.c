@@ -4512,7 +4512,6 @@ int thermodynamics_recombination_twin(
   preco->fHe_twin = preco->YHe_twin/(_not4_ *(1.-preco->YHe_twin));
   preco->Nnow_twin = 3.*preco->H0*preco->H0*OmegaB_twin/(8.*_PI_*_G_*mu_H_twin*_m_H_twin);
   pth->n_e_twin = preco->Nnow_twin; /* Should we include the electrons in Helium ?? */
-  printf("\n H0 = %0.4e, OmegaB_twin = %0.4f, G = %0.4e, Nnow_twin = %0.4e, _sigma_twin = %0.4e, _Mpc_over_m_ = %0.4e\n", preco->H0, OmegaB_twin, _G_, preco->Nnow_twin, _sigma_twin, _Mpc_over_m_);
   /** - define the fields of the 'thermodynamics parameter and workspace' structure */
   tpaw.pba = pba;
   tpaw.ppr = ppr;
