@@ -139,6 +139,19 @@ struct background
   char * ncdm_psd_files;                /**< list of filenames for tabulated p-s-d */
   /* end of parameters for tabulated ncdm p-s-d */
 
+  /** START #TWIN SECTOR */
+  /* TWIN: Input parameters */
+  double r_all_twin;
+  double Delta_N_twin;
+  double ratio_vev_twin;
+  /* TWIN: Input derived parameters */
+  double Omega0_b_twin;
+  double T0_twin;
+  double T0_ur_twin;
+  double Omega0_g_twin;
+  double Omega0_ur_twin;
+  /** END TWIN SECTOR */
+	
   //@}
 
   /** @name - related parameters */
@@ -230,6 +243,15 @@ struct background
   int bg_size_normal; /**< size of background vector in the "normal format" */
   int bg_size;        /**< size of background vector in the "long format" */
 
+  /** START #TWIN SECTOR */
+  /* TWIN: Indices in Normal format*/
+  int index_bg_rho_g_twin;         /**< mirror photon density */
+  int index_bg_rho_ur_twin;         /**< mirror relativistic neutrinos density */
+  int index_bg_rho_b_twin;         /**< mirror baryon density */
+  /* TWIN: Indices in long format*/
+  int index_bg_rs_twin;            /**< comoving sound horizon in Mpc (Twin) */
+  /** END TWIN SECTOR */
+    
   //@}
 
   /** @name - background interpolation tables */
@@ -279,6 +301,11 @@ struct background
   int index_bi_D;       /**< {C} scale independent growth factor D(a) for CDM perturbations. */
   int index_bi_D_prime; /**< {C} D satisfies \f$ [D''(\tau)=-aHD'(\tau)+3/2 a^2 \rho_M D(\tau) \f$ */
 
+  /** START #TWIN SECTOR */
+  /* TWIN: Indices to be integrated*/
+  int index_bi_rs_twin;         /**< mirror sound horizon */
+  /** END TWIN SECTOR */
+
   int bi_B_size;        /**< Number of {B} parameters */
   int bi_size;          /**< Number of {B}+{C} parameters */
 
@@ -306,6 +333,12 @@ struct background
   short has_idm_dr;    /**< presence of dark matter interacting with dark radiation? */
   short has_curvature; /**< presence of global spatial curvature? */
 
+  /** START #TWIN SECTOR */
+  /* TWIN: Flag */
+  short has_twin;         /**< presence of twin  */
+  /** END TWIN SECTOR */
+	
+	
   //@}
 
   /**
