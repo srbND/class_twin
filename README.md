@@ -13,7 +13,7 @@ for the MTH model. These MTH specific parameters are:
 
 1. r_all_twin: ratio of amount of twin baryons to CDM (range: [0, 1})
 
-2. Delta_N_twin: contribution of twin radiation to relativistic degrees of freedom of the Universe (range: [0, 1])
+2. Delta_N_twin: contribution of twin radiation to relativistic degrees of freedom of the Universe (range: [0.001, 1])
 
 3. ratio_vev_twin: Vacuum expectation value (vev) of the twin sector as compared to that of the SM (range: [1, 15]). For instance: ratio_vev_twin = 3 implies vev of the twin sector is three times the vev of the SM.
 
