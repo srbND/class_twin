@@ -124,6 +124,8 @@ cdef extern from "class.h":
         double b_idr
         double nindex_idm_dr
         double m_idm
+        double z_rec_twin
+        double tau_rec_twin
 
         int tt_size
 
