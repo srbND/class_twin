@@ -916,6 +916,9 @@ int input_read_parameters(
   class_call(parser_read_double(pfc,"r_all_twin",&param1,&flag1,errmsg),
               errmsg,
               errmsg);
+	class_test((param1 < 0.) || (param1 > 1.),
+              errmsg,
+               "The fraction of twin sector must be between 0 and 1, you asked for r_all_twin=%e",param1);
       if (flag1 == _TRUE_)
         pba->r_all_twin = param1;
       
@@ -923,6 +926,9 @@ int input_read_parameters(
   class_call(parser_read_double(pfc,"Delta_N_twin",&param1,&flag1,errmsg),
               errmsg,
               errmsg);
+	class_test((param1 < 0.001) || (param1 > 1.),
+              errmsg,
+               "Twin BBN is only computed for Delta_N_twin = [0.001, 1]. Therefore, Delta_N_twin_gamma must be between 0.001 and 1, you asked for Delta_N_twin = %e",param1); 
       if (flag1 == _TRUE_) {
         pba->Delta_N_twin = param1;
       }
@@ -930,6 +936,9 @@ int input_read_parameters(
   class_call(parser_read_double(pfc,"ratio_vev_twin",&param1,&flag1,errmsg),
               errmsg,
               errmsg);
+	class_test((param1 < 1.) || (param1 > 15.),
+              errmsg,
+               "Twin BBN is only computed for ratio_vev_twin = [1, 15]. Therefore, ratio_vev_twin must be between 1 and 15, you asked for ratio_vev_twin = %e",param1);
       if (flag1 == _TRUE_) {
         pba->ratio_vev_twin = param1;
       }
