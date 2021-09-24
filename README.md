@@ -24,5 +24,8 @@ invoke the MTH model, make sure that all the three parameters
 mentioned above are greater than 0. The easiest way to track the 
 changes made in the code is to search for "#TWIN".
 
+Note that if the twin sector is turned on, the input value of omega_cdm 
+corresponds to the total dark matter, i.e. cold dark matter + twin sector. 
+
 More details on this code can be found in the following paper:
 *paper link to be updated*
