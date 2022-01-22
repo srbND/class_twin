@@ -926,7 +926,7 @@ int input_read_parameters(
   class_call(parser_read_double(pfc,"Delta_N_twin",&param1,&flag1,errmsg),
               errmsg,
               errmsg);
-	class_test((param1 < 0.001) || (param1 > 1.),
+	class_test(pba->r_all_twin > 0. && ((param1 < 0.001) || (param1 > 1.)),
               errmsg,
                "Twin BBN is only computed for Delta_N_twin = [0.001, 1]. Therefore, Delta_N_twin_gamma must be between 0.001 and 1, you asked for Delta_N_twin = %e",param1); 
       if (flag1 == _TRUE_) {
