@@ -936,7 +936,7 @@ int input_read_parameters(
   class_call(parser_read_double(pfc,"ratio_vev_twin",&param1,&flag1,errmsg),
               errmsg,
               errmsg);
-	class_test((param1 < 1.) || (param1 > 15.),
+	class_test(pba->r_all_twin > 0. && (( param1 < 1.) || (param1 > 15.)),
               errmsg,
                "Twin BBN is only computed for ratio_vev_twin = [1, 15]. Therefore, ratio_vev_twin must be between 1 and 15, you asked for ratio_vev_twin = %e",param1);
       if (flag1 == _TRUE_) {
