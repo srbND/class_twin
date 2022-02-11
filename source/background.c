@@ -658,11 +658,12 @@ int background_init(
     printf("Running CLASS version %s\n",_VERSION_);
     printf("Computing background\n");
 
+    /* contribution of ultra-relativistic species _ur to N_eff */
+    Neff = pba->Omega0_ur/7.*8./pow(4./11.,4./3.)/pba->Omega0_g;
+    
     /* below we want to inform the user about ncdm species and/or the total N_eff */
     if ((pba->N_ncdm > 0) || (pba->Omega0_idr != 0. && pba->r_all_twin == 0.))  {
 
-      /* contribution of ultra-relativistic species _ur to N_eff */
-      Neff = pba->Omega0_ur/7.*8./pow(4./11.,4./3.)/pba->Omega0_g;
 
       /* contribution of ncdm species to N_eff*/
       if (pba->N_ncdm > 0){
