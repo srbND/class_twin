@@ -1033,7 +1033,7 @@ int input_read_parameters(
   };
   /** END TWIN SECTOR */
 
-  if (pba->Omega0_idm_dr > 0.) {
+  if (pba->Omega0_idm_dr > 0. || pba->r_all_twin > 0.) {
 
     class_test(pba->Omega0_idr == 0.0,
                errmsg,
