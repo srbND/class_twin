@@ -4495,6 +4495,7 @@ int thermodynamics_recombination_twin(
   /* z_initial (defined here)*/
   /* Guess the maximum redshift that will be required */
   zinitial=floor(preco->CB1_He2_twin/(preco->Tnow_twin*32));//ppr->recfast_z_initial;
+  if (pba->r_all_twin < 0.01){zinitial = floor(zinitial*0.01/pba->r_all_twin);} 
   if (zinitial<10000) {zinitial=10000;}
   pth->z_reco_twin = zinitial;
   
@@ -5057,6 +5058,7 @@ int thermodynamics_merge_reco_and_reio(
 
   int i,index_th,index_re;
   double x0;
+  double res = 1; /** #TWIN Step resolution in z-space for the extended table*/
 
   /** START #TWIN SECTOR */
     double reco_largest_z = 0, z, x0_twin;
@@ -5085,13 +5087,16 @@ int thermodynamics_merge_reco_and_reio(
 
   /** START #TWIN SECTOR */
   if (pba->has_twin == _TRUE_){
+    if (pth->z_reco_twin>100000)  {res = 3;}
+    if (pth->z_reco_twin>1000000) {res = 7;}
+    if (pth->z_reco_twin>10000000){res = 10;}
     reco_largest_z=preco->recombination_table[(ppr->recfast_Nz0-1)*preco->re_size+preco->index_re_z];
     if(pba->has_idm_dr == _FALSE_){
       if(pth->z_reco_twin > reco_largest_z){
-        additional_steps = floor((pth->z_reco_twin-reco_largest_z)/0.5)-2;
+        additional_steps = floor((pth->z_reco_twin-reco_largest_z)/res)-2;
         pth->tt_size += additional_steps;
         if(additional_steps > 0 && pth->thermodynamics_verbose > 0){
-          printf("Extended Thermodynamics table to z = %.2f by adding %d steps.\n",reco_largest_z + additional_steps*0.5,additional_steps);
+          printf("Extended Thermodynamics table to z = %.2f by adding %d steps.\n",reco_largest_z + additional_steps*res,additional_steps);
         }
       }
     }
@@ -5185,7 +5190,7 @@ int thermodynamics_merge_reco_and_reio(
       for (i=0; i < pth->tt_size; i++){
         /* First filling the standard model values in the extended part of the table */
         if(i > (reco_last_index-1)){
-          pth->z_table[i] = reco_largest_z + (i-reco_last_index+1)*0.5;
+          pth->z_table[i] = reco_largest_z + (i-reco_last_index+1)*res;
           /* same extrapolation formulas as in thermodynamics_at_z() */
           x0=pth->thermodynamics_table[(reco_last_index-1)*pth->th_size+pth->index_th_xe];
           pth->thermodynamics_table[i*pth->th_size+pth->index_th_xe]=x0;
